@@ -1,0 +1,143 @@
+# Copyright (c) 2026 PaperProof Labs
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: paperproof
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paperproof-indexer-config
+  namespace: paperproof
+data:
+  RUST_LOG: "paperproof_sdk_rs=info"
+  PAPERPROOF_RS_INDEXER_OUT: "/var/lib/paperproof/indexer"
+  PAPERPROOF_RS_TAIL: "1"
+  PAPERPROOF_RS_TAIL_INTERVAL_MS: "10000"
+  PAPERPROOF_RS_TAIL_LIMIT: "50"
+  PAPERPROOF_RS_BACKFILL_LIMIT: "100"
+  PAPERPROOF_RS_BACKFILL_PAGES: "10"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: paperproof-indexer-data
+  namespace: paperproof
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paperproof-indexer-tail
+  namespace: paperproof
+  labels:
+    app.kubernetes.io/name: paperproof-indexer-tail
+    app.kubernetes.io/part-of: paperproof
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: paperproof-indexer-tail
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: paperproof-indexer-tail
+        app.kubernetes.io/part-of: paperproof
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      initContainers:
+        - name: deployment-drift-check
+          image: ghcr.io/paperprooflabs/paperproof-sdk-rs:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/paperproof-check-deployment-update"]
+          envFrom:
+            - configMapRef:
+                name: paperproof-indexer-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        - name: indexer
+          image: ghcr.io/paperprooflabs/paperproof-sdk-rs:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/paperproof-indexer-tail"]
+          envFrom:
+            - configMapRef:
+                name: paperproof-indexer-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/paperproof
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: paperproof-indexer-data
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: paperproof-indexer-backfill
+  namespace: paperproof
+  labels:
+    app.kubernetes.io/name: paperproof-indexer-backfill
+    app.kubernetes.io/part-of: paperproof
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: paperproof-indexer-backfill
+        app.kubernetes.io/part-of: paperproof
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: backfill
+          image: ghcr.io/paperprooflabs/paperproof-sdk-rs:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/paperproof-indexer-backfill"]
+          envFrom:
+            - configMapRef:
+                name: paperproof-indexer-config
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/paperproof
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: paperproof-indexer-data

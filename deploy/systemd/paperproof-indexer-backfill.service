@@ -1,0 +1,26 @@
+# Copyright (c) 2026 PaperProof Labs
+# SPDX-License-Identifier: Apache-2.0
+
+[Unit]
+Description=PaperProof canonical event backfill indexer
+Documentation=https://github.com/PaperProofLabs/paperproof-sdk-rs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=paperproof
+Group=paperproof
+EnvironmentFile=/etc/paperproof/indexer.env
+ExecStartPre=/usr/local/bin/paperproof-check-deployment-update
+ExecStart=/usr/local/bin/paperproof-indexer-backfill
+StateDirectory=paperproof
+WorkingDirectory=/var/lib/paperproof
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/paperproof
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true

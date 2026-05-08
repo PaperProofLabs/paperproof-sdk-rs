@@ -1,0 +1,14 @@
+# Copyright (c) 2026 PaperProof Labs
+# SPDX-License-Identifier: Apache-2.0
+
+target
+.git
+.github
+examples/artifacts
+*.pdb
+*.rs.bk
+**/mutants.out*
+.env
+*.env
+*.log
+paperproof-sdk-rs-*.crate
