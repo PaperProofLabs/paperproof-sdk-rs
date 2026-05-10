@@ -36,6 +36,7 @@ pub enum PaperProofSdkRead {
 #[derive(Clone, Debug)]
 pub enum PaperProofSdkQuery {
     JsonRpc(PaperProofQueryClient),
+    GraphQl(PaperProofQueryClient),
 }
 
 #[derive(Clone, Debug)]
@@ -80,7 +81,7 @@ pub fn create_paperproof_sdk(options: CreatePaperProofSdkOptions) -> Result<Pape
         PaperProofTransport::JsonRpc => {
             let rpc = JsonRpcClient::new(rpc_url);
             let read = PaperProofReadClient::new(rpc.clone(), deployment.clone());
-            let query = PaperProofQueryClient::new(rpc, deployment.clone());
+            let query = PaperProofQueryClient::new_jsonrpc(rpc, deployment.clone());
             Ok(PaperProofSdk {
                 deployment,
                 transport: PaperProofTransport::JsonRpc,
@@ -102,14 +103,21 @@ fn create_grpc_sdk(
     client: PaperProofClient,
     rpc_url: String,
 ) -> Result<PaperProofSdk> {
+    use crate::query::{GraphQlQueryProvider, MAINNET_GRAPHQL_ENDPOINT};
+
     let provider = crate::sui_native::SuiNativeProvider::new(rpc_url)?;
     let read = crate::read::PaperProofProviderReadClient::new(provider, deployment.clone());
+    let query = PaperProofQueryClient::new_graphql(
+        JsonRpcClient::new(deployment.rpc_url.clone()),
+        GraphQlQueryProvider::new(MAINNET_GRAPHQL_ENDPOINT),
+        deployment.clone(),
+    );
     Ok(PaperProofSdk {
         deployment,
         transport: PaperProofTransport::Grpc,
         client,
         read: PaperProofSdkRead::Grpc(Box::new(read)),
-        query: None,
+        query: Some(PaperProofSdkQuery::GraphQl(query)),
     })
 }
 

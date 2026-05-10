@@ -74,7 +74,8 @@ pub use providers::{
     ProviderExecutionOutput,
 };
 pub use query::{
-    EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient, SeriesDetails,
+    EventPage, EventQueryInput, GraphQlQueryProvider, MAINNET_GRAPHQL_ENDPOINT, PaginationInput,
+    PaperProofQueryClient, PaperProofQueryProvider, SeriesDetails, TESTNET_GRAPHQL_ENDPOINT,
 };
 pub use read::{Balance, CoinObject, Page, PaperProofProviderReadClient, PaperProofReadClient};
 pub use robust::{

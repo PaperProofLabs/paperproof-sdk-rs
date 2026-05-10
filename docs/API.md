@@ -56,19 +56,29 @@ Provider interfaces:
 - business objects: series, versions, comments trees, likes books, proposals;
 - dynamic fields: comments, likes and proposal id mapping;
 - balances and coin pages;
-- event queries when backed by a provider that supports them. The built-in JSON-RPC event path is deprecated compatibility glue for short-term backfills.
+- event queries when backed by a provider that supports them. The built-in JSON-RPC event path is deprecated compatibility glue for explicit short-term backfills.
 
 `PaperProofQueryClient` adds indexer-style helpers:
 
 - `query_events`
 - `query_canonical_events`
 - `query_all_events`
+- `query_governance_proposal_created_events`
+- `query_governance_vote_cast_events`
+- `query_governance_finalized_events`
+- `query_governance_executed_events`
+- `query_governance_expired_events`
+- `query_governance_vote_claimed_events`
 - `get_series_details`
 - `parse_events_by_struct`
 
+`PaperProofQueryClient::mainnet()` is GraphQL-first. Governance helpers query both the current and original governance
+packages, filter by the configured PaperProof root/registry id, and deduplicate by transaction digest plus event
+sequence. Frontends and indexers should prefer these helpers over single-package hand-built event queries.
+
 Event query filters support sender, package, package+module, event type and move event type. Incompatible Sui query combinations return `EventParse` errors before sending a request.
 
-Note: the official Sui Rust SDK path used by this crate's `sui-native` feature is gRPC-oriented and does not support JSON-RPC. The SDK's `JsonRpcClient` is a small `reqwest` compatibility adapter kept for migration/backfill scenarios where the current Rust gRPC crate does not yet expose equivalent high-level event APIs. Do not treat it as the recommended or default transport for new services.
+Note: the official Sui Rust SDK path used by this crate's `sui-native` feature is gRPC-oriented and does not support JSON-RPC. The SDK's `JsonRpcClient` is a small `reqwest` compatibility adapter kept for migration/backfill scenarios. Do not treat it as the recommended or default transport for new services.
 
 Typed view helpers convert raw Move object fields into stable Rust structs:
 

@@ -11,10 +11,10 @@ Rust applications a conservative integration point: builders return neutral
 pipeline, a backend signer, or a custom transaction service.
 
 The high-level SDK constructor follows the TypeScript SDK transport policy:
-gRPC is the default transport. The official Sui Rust SDK path does not support
-JSON-RPC. This crate keeps a small `reqwest` JSON-RPC compatibility adapter only
-for short-term historical event backfills and migration paths where equivalent
-Rust gRPC/GraphQL APIs are not yet wired into this SDK.
+gRPC is the default object/read transport, and GraphQL is the default event/history
+query transport. The official Sui Rust SDK path does not support JSON-RPC. This
+crate keeps a small `reqwest` JSON-RPC compatibility adapter only for explicit
+short-term historical backfills and migration paths.
 
 ## Install
 
@@ -114,7 +114,8 @@ as the default transport for new services.
 - Full `PaperProofReadClient` for canonical objects, series, versions, comments,
   likes, governance proposals, dynamic fields, balances and coin pages.
 - `PaperProofQueryClient` for paginated event queries, canonical event filtering,
-  all-page collection helpers and typed event extraction.
+  all-page collection helpers, GraphQL-first historical queries, governance
+  history helpers and typed event extraction.
 - Typed view structs for common PaperProof on-chain objects.
 - `PaperProofService` for script-friendly high-level operations backed by the
   Sui CLI executor.
@@ -122,8 +123,8 @@ as the default transport for new services.
   `PaperProofDataProvider`, `PaperProofExecutionProvider` and `PaperProofProvider`.
 - Feature-gated native Sui adapter scaffolding based on `sui-rpc` and
   `sui-sdk-types`; `create_paperproof_sdk` defaults to this gRPC transport when
-  the `sui-native` feature is enabled. CLI execution remains the conservative
-  fallback for write flows.
+  the `sui-native` feature is enabled and wires GraphQL for event queries. CLI
+  execution remains the conservative fallback for write flows.
 - Deployment verification that checks canonical object/package bindings before
   indexers or services trust a configuration.
 - Checkpoint ingestion abstractions for high-throughput indexers:

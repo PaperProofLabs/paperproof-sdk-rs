@@ -19,7 +19,7 @@ async fn default_sdk_transport_is_grpc() {
     let sdk = PaperProofSdk::mainnet().unwrap();
     assert_eq!(sdk.transport, PaperProofTransport::Grpc);
     assert!(matches!(sdk.read, PaperProofSdkRead::Grpc(_)));
-    assert!(sdk.query.is_none());
+    assert!(matches!(sdk.query, Some(PaperProofSdkQuery::GraphQl(_))));
 }
 
 #[test]
