@@ -121,7 +121,6 @@ where
         let mut client = self.client.clone();
         let mut request = GetCheckpointRequest::default();
         request.checkpoint_id = Some(CheckpointId::SequenceNumber(sequence_number));
-        request.read_mask = Some(field_mask(&["checkpoint"]));
         let response = client
             .ledger_client()
             .get_checkpoint(request)

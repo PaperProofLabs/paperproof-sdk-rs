@@ -14,6 +14,8 @@ use paperproof_sdk_rs::{
     query::{EventPage, PaperProofQueryClient},
 };
 use serde_json::json;
+#[cfg(feature = "async")]
+use std::sync::{Arc, Mutex};
 
 #[test]
 fn indexer_batch_splits_canonical_and_rejected_events() {
@@ -256,8 +258,78 @@ async fn checkpoint_scan_defaults_to_canonical_filtering() {
     assert_eq!(batch.accepted[0].id.checkpoint, Some(5));
 }
 
+#[cfg(feature = "async")]
+#[tokio::test]
+async fn checkpoint_ingestion_runs_workers_persists_resume_and_metrics() {
+    let query = PaperProofQueryClient::mainnet();
+    let indexer = PaperProofIndexerClient::new(query);
+    let provider = MockCheckpointProvider {
+        deployment: mainnet_deployment(),
+    };
+    let sink = CollectingSink::default();
+    let store = MemoryIndexerCursorStore::default();
+    let report = indexer
+        .ingest_checkpoint_range_once(
+            Arc::new(provider),
+            Arc::new(sink.clone()),
+            Arc::new(store.clone()),
+            paperproof_sdk_rs::CheckpointIngestionOptions {
+                start_checkpoint: Some(5),
+                checkpoint_count: 4,
+                batch_size: 2,
+                worker_count: 2,
+                max_checkpoints_per_second: None,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(report.start_checkpoint, 5);
+    assert_eq!(report.next_checkpoint, 9);
+    assert_eq!(report.metrics.processed_events, 4);
+    assert_eq!(report.metrics.rejected_events, 4);
+    assert_eq!(report.metrics.checkpoints_scanned, 4);
+    assert_eq!(sink.accepted(), 4);
+    let stored = store
+        .load_cursor(&StreamId::checkpoint())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.checkpoint_cursor.unwrap().next_checkpoint, 9);
+}
+
 struct MockCheckpointProvider {
     deployment: paperproof_sdk_rs::Deployment,
+}
+
+#[cfg(feature = "async")]
+#[derive(Clone, Default)]
+struct CollectingSink {
+    accepted: Arc<Mutex<usize>>,
+}
+
+#[cfg(feature = "async")]
+impl CollectingSink {
+    fn accepted(&self) -> usize {
+        *self.accepted.lock().unwrap()
+    }
+}
+
+#[cfg(feature = "async")]
+#[async_trait]
+impl paperproof_sdk_rs::PaperProofEventSink for CollectingSink {
+    async fn write_batch(
+        &self,
+        batch: &paperproof_sdk_rs::IndexerEventBatch,
+    ) -> Result<paperproof_sdk_rs::SinkWriteSummary> {
+        *self.accepted.lock().unwrap() += batch.accepted.len();
+        Ok(paperproof_sdk_rs::SinkWriteSummary {
+            accepted_written: batch.accepted.len(),
+            rejected_written: batch.rejected.len(),
+            duplicate_skipped: 0,
+        })
+    }
 }
 
 #[async_trait]

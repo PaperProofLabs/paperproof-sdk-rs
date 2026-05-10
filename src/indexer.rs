@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(feature = "async")]
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -13,6 +21,12 @@ use crate::{
     events::{PaperProofEventKind, SuiEventEnvelope, parse_event},
     events_trust::{EventTrustResult, check_canonical_paperproof_event},
     query::{EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient},
+};
+#[cfg(feature = "async")]
+use crate::{
+    error::PaperProofError,
+    robust::{RetryOptions, default_retryable},
+    sink::PaperProofEventSink,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -125,6 +139,24 @@ impl IndexerCursorStore for MemoryIndexerCursorStore {
             .lock()
             .expect("cursor store poisoned")
             .insert(event_id.clone()))
+    }
+}
+
+#[async_trait]
+impl<T> IndexerCursorStore for Box<T>
+where
+    T: IndexerCursorStore + ?Sized,
+{
+    async fn load_cursor(&self, stream: &StreamId) -> Result<Option<StoredIndexerCursor>> {
+        (**self).load_cursor(stream).await
+    }
+
+    async fn save_cursor(&self, stream: &StreamId, cursor: StoredIndexerCursor) -> Result<()> {
+        (**self).save_cursor(stream, cursor).await
+    }
+
+    async fn mark_processed(&self, event_id: &EventId) -> Result<bool> {
+        (**self).mark_processed(event_id).await
     }
 }
 
@@ -326,6 +358,59 @@ pub struct CheckpointScanOptions {
     pub start_checkpoint: u64,
     pub limit: u64,
     pub canonical_only: bool,
+}
+
+#[cfg(feature = "async")]
+#[derive(Clone, Debug)]
+pub struct CheckpointIngestionOptions {
+    pub start_checkpoint: Option<u64>,
+    pub checkpoint_count: u64,
+    pub batch_size: u64,
+    pub worker_count: usize,
+    pub max_checkpoints_per_second: Option<u64>,
+    pub retry: RetryOptions,
+    pub canonical_only: bool,
+}
+
+#[cfg(feature = "async")]
+impl Default for CheckpointIngestionOptions {
+    fn default() -> Self {
+        Self {
+            start_checkpoint: None,
+            checkpoint_count: 100,
+            batch_size: 10,
+            worker_count: 4,
+            max_checkpoints_per_second: None,
+            retry: RetryOptions::default(),
+            canonical_only: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct IndexerMetrics {
+    pub processed_events: u64,
+    pub rejected_events: u64,
+    pub checkpoint_lag: Option<u64>,
+    pub db_write_latency_ms: u64,
+    pub retry_count: u64,
+    pub batches_written: u64,
+    pub checkpoints_scanned: u64,
+    pub duplicate_events_skipped: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CheckpointIngestionReport {
+    pub start_checkpoint: u64,
+    pub next_checkpoint: u64,
+    pub metrics: IndexerMetrics,
+}
+
+#[cfg(feature = "async")]
+#[derive(Debug)]
+struct CheckpointJob {
+    start_checkpoint: u64,
+    limit: u64,
 }
 
 impl Default for CheckpointScanOptions {
@@ -1049,6 +1134,320 @@ impl PaperProofIndexerClient {
         emit_batch_metrics("checkpoint", &batch);
         Ok(batch)
     }
+
+    #[cfg(feature = "async")]
+    pub async fn ingest_checkpoint_range_once<P, S, C>(
+        &self,
+        provider: Arc<P>,
+        sink: Arc<S>,
+        cursor_store: Arc<C>,
+        options: CheckpointIngestionOptions,
+    ) -> Result<CheckpointIngestionReport>
+    where
+        P: CheckpointDataProvider + 'static,
+        S: PaperProofEventSink + ?Sized + 'static,
+        C: IndexerCursorStore + ?Sized + 'static,
+    {
+        let stream = StreamId::checkpoint();
+        let stored = cursor_store.load_cursor(&stream).await?;
+        let start_checkpoint = options
+            .start_checkpoint
+            .or_else(|| {
+                stored
+                    .as_ref()
+                    .and_then(|cursor| cursor.checkpoint_cursor.as_ref())
+                    .map(|cursor| cursor.next_checkpoint)
+            })
+            .unwrap_or(0);
+        let checkpoint_count = options.checkpoint_count;
+        if checkpoint_count == 0 {
+            return Ok(CheckpointIngestionReport {
+                start_checkpoint,
+                next_checkpoint: start_checkpoint,
+                metrics: IndexerMetrics::default(),
+            });
+        }
+        let batch_size = options.batch_size.max(1);
+        let worker_count = options.worker_count.max(1);
+        let retry = options.retry.clone();
+        let max_checkpoint = start_checkpoint.saturating_add(checkpoint_count);
+        let next_job_checkpoint = Arc::new(AtomicU64::new(start_checkpoint));
+        let next_cursor = Arc::new(AtomicU64::new(start_checkpoint));
+        let metrics = Arc::new(IndexerMetricsAtomic::default());
+        let limiter = Arc::new(CheckpointRateLimiter::new(
+            options.max_checkpoints_per_second,
+        ));
+        let mut handles = Vec::new();
+
+        for _ in 0..worker_count {
+            let provider = Arc::clone(&provider);
+            let sink = Arc::clone(&sink);
+            let cursor_store = Arc::clone(&cursor_store);
+            let next_job_checkpoint = Arc::clone(&next_job_checkpoint);
+            let next_cursor = Arc::clone(&next_cursor);
+            let metrics = Arc::clone(&metrics);
+            let limiter = Arc::clone(&limiter);
+            let deployment = self.query.deployment.clone();
+            let retry = retry.clone();
+            let stream = stream.clone();
+            let canonical_only = options.canonical_only;
+            handles.push(tokio::spawn(async move {
+                loop {
+                    let start = next_job_checkpoint.fetch_add(batch_size, Ordering::SeqCst);
+                    if start >= max_checkpoint {
+                        break;
+                    }
+                    let limit = batch_size.min(max_checkpoint - start);
+                    let job = CheckpointJob {
+                        start_checkpoint: start,
+                        limit,
+                    };
+                    limiter.acquire(limit).await;
+                    let batch = checkpoint_job_with_retries(
+                        provider.as_ref(),
+                        &deployment,
+                        &retry,
+                        canonical_only,
+                        &metrics,
+                        job,
+                    )
+                    .await?;
+                    let write_started = Instant::now();
+                    let summary = sink.write_batch(&batch).await?;
+                    metrics.add_db_write_latency(write_started.elapsed());
+                    metrics.add_processed(batch.progress.accepted_events);
+                    metrics.add_rejected(batch.progress.rejected_events);
+                    metrics.add_checkpoints(limit);
+                    metrics.add_duplicates(summary.duplicate_skipped as u64);
+                    let candidate_next = start.saturating_add(limit);
+                    advance_cursor_after_checkpoint_batch(
+                        cursor_store.as_ref(),
+                        &stream,
+                        &next_cursor,
+                        candidate_next,
+                    )
+                    .await?;
+                }
+                Ok::<(), PaperProofError>(())
+            }));
+        }
+
+        for handle in handles {
+            handle.await.map_err(|err| PaperProofError::Network {
+                endpoint: "checkpoint worker".to_string(),
+                message: err.to_string(),
+            })??;
+        }
+        let final_next_checkpoint = next_cursor.load(Ordering::SeqCst);
+        let mut report_metrics = metrics.snapshot();
+        report_metrics.checkpoint_lag = Some(max_checkpoint.saturating_sub(final_next_checkpoint));
+        emit_checkpoint_ingestion_metrics(&report_metrics);
+        Ok(CheckpointIngestionReport {
+            start_checkpoint,
+            next_checkpoint: final_next_checkpoint,
+            metrics: report_metrics,
+        })
+    }
+}
+
+#[cfg(feature = "async")]
+#[derive(Debug, Default)]
+struct IndexerMetricsAtomic {
+    processed_events: AtomicU64,
+    rejected_events: AtomicU64,
+    db_write_latency_ms: AtomicU64,
+    retry_count: AtomicU64,
+    batches_written: AtomicU64,
+    checkpoints_scanned: AtomicU64,
+    duplicate_events_skipped: AtomicU64,
+}
+
+#[cfg(feature = "async")]
+impl IndexerMetricsAtomic {
+    fn add_processed(&self, value: u64) {
+        self.processed_events.fetch_add(value, Ordering::Relaxed);
+        self.batches_written.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn add_rejected(&self, value: u64) {
+        self.rejected_events.fetch_add(value, Ordering::Relaxed);
+    }
+
+    fn add_db_write_latency(&self, value: Duration) {
+        self.db_write_latency_ms
+            .fetch_add(value.as_millis() as u64, Ordering::Relaxed);
+    }
+
+    fn add_retry(&self) {
+        self.retry_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn add_checkpoints(&self, value: u64) {
+        self.checkpoints_scanned.fetch_add(value, Ordering::Relaxed);
+    }
+
+    fn add_duplicates(&self, value: u64) {
+        self.duplicate_events_skipped
+            .fetch_add(value, Ordering::Relaxed);
+    }
+
+    fn snapshot(&self) -> IndexerMetrics {
+        IndexerMetrics {
+            processed_events: self.processed_events.load(Ordering::Relaxed),
+            rejected_events: self.rejected_events.load(Ordering::Relaxed),
+            checkpoint_lag: None,
+            db_write_latency_ms: self.db_write_latency_ms.load(Ordering::Relaxed),
+            retry_count: self.retry_count.load(Ordering::Relaxed),
+            batches_written: self.batches_written.load(Ordering::Relaxed),
+            checkpoints_scanned: self.checkpoints_scanned.load(Ordering::Relaxed),
+            duplicate_events_skipped: self.duplicate_events_skipped.load(Ordering::Relaxed),
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+#[derive(Debug)]
+struct CheckpointRateLimiter {
+    delay_per_checkpoint: Option<Duration>,
+    lock: tokio::sync::Mutex<()>,
+}
+
+#[cfg(feature = "async")]
+impl CheckpointRateLimiter {
+    fn new(max_checkpoints_per_second: Option<u64>) -> Self {
+        Self {
+            delay_per_checkpoint: max_checkpoints_per_second
+                .filter(|value| *value > 0)
+                .map(|value| Duration::from_secs_f64(1.0 / value as f64)),
+            lock: tokio::sync::Mutex::new(()),
+        }
+    }
+
+    async fn acquire(&self, checkpoints: u64) {
+        let Some(delay_per_checkpoint) = self.delay_per_checkpoint else {
+            return;
+        };
+        let _guard = self.lock.lock().await;
+        tokio::time::sleep(delay_per_checkpoint.saturating_mul(checkpoints as u32)).await;
+    }
+}
+
+#[cfg(feature = "async")]
+async fn checkpoint_job_with_retries<P>(
+    provider: &P,
+    deployment: &Deployment,
+    retry: &RetryOptions,
+    canonical_only: bool,
+    metrics: &IndexerMetricsAtomic,
+    job: CheckpointJob,
+) -> Result<IndexerEventBatch>
+where
+    P: CheckpointDataProvider,
+{
+    let attempts = retry.attempts.max(1);
+    let mut last_error = None;
+    for attempt in 1..=attempts {
+        match checkpoint_job_once(provider, deployment, canonical_only, &job).await {
+            Ok(batch) => return Ok(batch),
+            Err(error) => {
+                if attempt >= attempts || !is_indexer_retryable(retry, &error) {
+                    return Err(error);
+                }
+                metrics.add_retry();
+                last_error = Some(error);
+                let delay = retry
+                    .base_delay_ms
+                    .saturating_mul(attempt as u64)
+                    .min(retry.max_delay_ms);
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    attempt,
+                    attempts,
+                    delay_ms = delay,
+                    start_checkpoint = job.start_checkpoint,
+                    limit = job.limit,
+                    "paperproof checkpoint worker retry"
+                );
+                tokio::time::sleep(Duration::from_millis(delay)).await;
+            }
+        }
+    }
+    Err(last_error.unwrap_or_else(|| PaperProofError::Network {
+        endpoint: "checkpoint worker".to_string(),
+        message: "checkpoint job failed without an error".to_string(),
+    }))
+}
+
+#[cfg(feature = "async")]
+async fn checkpoint_job_once<P>(
+    provider: &P,
+    deployment: &Deployment,
+    canonical_only: bool,
+    job: &CheckpointJob,
+) -> Result<IndexerEventBatch>
+where
+    P: CheckpointDataProvider,
+{
+    let mut events = Vec::new();
+    let mut raw_checkpoints = Vec::new();
+    let mut last_checkpoint = job.start_checkpoint;
+    for offset in 0..job.limit {
+        let checkpoint = job.start_checkpoint + offset;
+        let data = provider.get_checkpoint_data(checkpoint).await?;
+        last_checkpoint = data.sequence_number;
+        events.extend(data.events);
+        raw_checkpoints.push(data.raw);
+    }
+    let page = EventPage {
+        data: events,
+        next_cursor: Some(json!({ "checkpoint": last_checkpoint + 1 })),
+        has_next_page: true,
+        raw: json!({
+            "source": "checkpoint",
+            "startCheckpoint": job.start_checkpoint,
+            "nextCheckpoint": last_checkpoint + 1,
+            "checkpoints": raw_checkpoints,
+        }),
+    };
+    Ok(indexer_batch_from_page(page, deployment, canonical_only))
+}
+
+#[cfg(feature = "async")]
+async fn advance_cursor_after_checkpoint_batch<C>(
+    cursor_store: &C,
+    stream: &StreamId,
+    next_cursor: &AtomicU64,
+    candidate_next: u64,
+) -> Result<()>
+where
+    C: IndexerCursorStore + ?Sized,
+{
+    loop {
+        let current = next_cursor.load(Ordering::SeqCst);
+        if candidate_next <= current {
+            return Ok(());
+        }
+        if next_cursor
+            .compare_exchange(current, candidate_next, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            cursor_store
+                .save_cursor(
+                    stream,
+                    StoredIndexerCursor {
+                        event_cursor: None,
+                        checkpoint_cursor: Some(CheckpointCursor::new(candidate_next)),
+                    },
+                )
+                .await?;
+            return Ok(());
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+fn is_indexer_retryable(retry: &RetryOptions, error: &PaperProofError) -> bool {
+    (retry.retryable)(error) || default_retryable(error)
 }
 
 pub fn indexer_batch_from_page(
@@ -1202,4 +1601,21 @@ fn emit_batch_metrics(source: &str, batch: &IndexerEventBatch) {
         "paperproof indexer batch"
     );
     let _ = (source, batch);
+}
+
+#[cfg(feature = "async")]
+fn emit_checkpoint_ingestion_metrics(metrics: &IndexerMetrics) {
+    #[cfg(feature = "tracing")]
+    tracing::info!(
+        processed_events = metrics.processed_events,
+        rejected_events = metrics.rejected_events,
+        checkpoint_lag = metrics.checkpoint_lag,
+        db_write_latency_ms = metrics.db_write_latency_ms,
+        retry_count = metrics.retry_count,
+        batches_written = metrics.batches_written,
+        checkpoints_scanned = metrics.checkpoints_scanned,
+        duplicate_events_skipped = metrics.duplicate_events_skipped,
+        "paperproof checkpoint ingestion metrics"
+    );
+    let _ = metrics;
 }

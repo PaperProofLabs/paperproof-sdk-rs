@@ -38,6 +38,17 @@ create table if not exists paperproof_rejected_events (
     inserted_at text not null default current_timestamp
 );
 
+create table if not exists paperproof_processed_events (
+    event_key text primary key,
+    checkpoint integer,
+    transaction_digest text,
+    event_seq integer,
+    package_id text not null,
+    module text not null,
+    event_type text not null,
+    processed_at text not null default current_timestamp
+);
+
 create index if not exists paperproof_events_checkpoint_idx on paperproof_events(checkpoint);
 create index if not exists paperproof_events_kind_idx on paperproof_events(kind);
 create index if not exists paperproof_events_package_module_idx on paperproof_events(package_id, module);

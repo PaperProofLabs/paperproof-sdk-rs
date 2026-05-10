@@ -34,10 +34,25 @@ Common environment variables:
 | `PAPERPROOF_RS_TAIL` | unset | Must be `1` to run the tail loop. |
 | `PAPERPROOF_RS_TAIL_INTERVAL_MS` | `10000` | Polling interval for tail mode. |
 | `PAPERPROOF_RS_TAIL_LIMIT` | `25` | Events per module per tail scan. |
+| `PAPERPROOF_RS_SINK` | `jsonl` | Sink backend: `jsonl`, `sqlite`, or `postgres`. |
+| `PAPERPROOF_RS_SQLITE_PATH` | derived from output dir | SQLite database path when `PAPERPROOF_RS_SINK=sqlite`. |
+| `PAPERPROOF_RS_POSTGRES_URL` | unset | Postgres connection string when `PAPERPROOF_RS_SINK=postgres`. |
+| `PAPERPROOF_RS_CHECKPOINT` | unset | Set to `1` to use gRPC checkpoint ingestion instead of event-query pagination. |
+| `PAPERPROOF_RS_CHECKPOINT_START` | stored cursor or `0` | Optional explicit checkpoint start. Omit for resume. |
+| `PAPERPROOF_RS_CHECKPOINT_COUNT` | `100` backfill, `25` tail | Checkpoints scanned per run/loop. |
+| `PAPERPROOF_RS_CHECKPOINT_BATCH` | `10` backfill, `5` tail | Checkpoints per worker batch. |
+| `PAPERPROOF_RS_CHECKPOINT_WORKERS` | `4` | Concurrent checkpoint workers. |
+| `PAPERPROOF_RS_CHECKPOINTS_PER_SECOND` | unlimited | Global checkpoint rate limit. |
 
 Do not mount private keys into read-only indexer deployments. Mainnet write
 examples remain separately opt-in and should not share the same service account
 or pod.
+
+Checkpoint mode requires a build with `--features sui-native` and is the
+recommended production path as Sui JSON-RPC moves toward sunset. Cursor resume
+uses `StreamId::checkpoint()` in the selected cursor store, so restarts continue
+from the last persisted checkpoint unless `PAPERPROOF_RS_CHECKPOINT_START` is
+set explicitly.
 
 ## Docker
 
@@ -162,8 +177,27 @@ The SDK ships schema templates:
 - `sql/sqlite_indexer_schema.sql`
 
 The example `indexer_sql_sinks` prints SQL-ready JSON parameter maps. Production
-services should implement `PaperProofEventSink` directly and use `EventId::key()`
-as the idempotency key for upserts.
+services can use `SqliteEventSink` / `PostgresEventSink` directly, or implement
+`PaperProofEventSink` with their own pool. The supplied backfill and tail
+examples choose the sink with `PAPERPROOF_RS_SINK` and persist cursors with the
+matching `SqliteCursorStore` / `PostgresCursorStore`.
+
+SQLite backfill:
+
+```bash
+PAPERPROOF_RS_SINK=sqlite \
+PAPERPROOF_RS_SQLITE_PATH=/var/lib/paperproof/indexer/paperproof-indexer.sqlite \
+cargo run --release --features sqlite --example indexer_backfill
+```
+
+Postgres tail:
+
+```bash
+PAPERPROOF_RS_TAIL=1 \
+PAPERPROOF_RS_SINK=postgres \
+PAPERPROOF_RS_POSTGRES_URL=postgres://paperproof:paperproof@localhost/paperproof \
+cargo run --release --features postgres --example indexer_tail
+```
 
 Recommended ingestion flow:
 

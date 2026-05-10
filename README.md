@@ -133,7 +133,9 @@ as the default transport for new services.
   `CheckpointDataProvider`, `CheckpointScanOptions`, persistent cursor traits,
   `EventId` idempotency keys and canonical-by-default filtering.
 - Indexer sinks and schemas: `PaperProofEventSink`, `JsonlEventSink`,
-  `POSTGRES_SCHEMA_SQL`, `SQLITE_SCHEMA_SQL`, plus SQL parameter helpers.
+  feature-gated `SqliteEventSink` / `PostgresEventSink`, feature-gated
+  `SqliteCursorStore` / `PostgresCursorStore`, `POSTGRES_SCHEMA_SQL`,
+  `SQLITE_SCHEMA_SQL`, plus SQL parameter helpers.
 - Domain reducer output via `PaperProofDomainChange` for production-oriented
   upsert/update pipelines.
 - Deployment drift hard-fail policy for long-running services.
@@ -177,6 +179,36 @@ Indexer deployment examples:
 docker build -t paperproof-sdk-rs:local .
 cargo run --example indexer_sql_sinks
 ```
+
+Enable database-backed sinks and cursor stores explicitly:
+
+```powershell
+$env:PAPERPROOF_RS_SINK='sqlite'
+$env:PAPERPROOF_RS_SQLITE_PATH='examples/artifacts/indexer/paperproof-indexer.sqlite'
+cargo run --features sqlite --example indexer_backfill
+cargo run --features sqlite --example indexer_tail
+
+$env:PAPERPROOF_RS_SINK='postgres'
+$env:PAPERPROOF_RS_POSTGRES_URL='postgres://user:pass@localhost/paperproof'
+cargo run --features postgres --example indexer_backfill
+cargo run --features postgres --example indexer_tail
+```
+
+Enable checkpoint ingestion with concurrent workers, resume, rate limiting and
+retry metrics:
+
+```powershell
+$env:PAPERPROOF_RS_CHECKPOINT='1'
+$env:PAPERPROOF_RS_CHECKPOINT_COUNT='500'
+$env:PAPERPROOF_RS_CHECKPOINT_BATCH='25'
+$env:PAPERPROOF_RS_CHECKPOINT_WORKERS='8'
+$env:PAPERPROOF_RS_CHECKPOINTS_PER_SECOND='50'
+cargo run --features sui-native,sqlite,tracing --example indexer_backfill
+```
+
+Checkpoint mode persists `StreamId::checkpoint()` through the selected cursor
+store and prints processed events, rejected events, checkpoint lag, DB write
+latency, retry count and duplicate skips.
 
 Production operators can start from:
 
@@ -304,10 +336,13 @@ Indexer guidance:
   gRPC/checkpoint ingestion; keep JSON-RPC event queries for compatibility
   backfill only.
 - Persist `StoredIndexerCursor` with an implementation of `IndexerCursorStore`.
+  The SDK ships `SqliteCursorStore` behind the `sqlite` feature and
+  `PostgresCursorStore` behind the `postgres` feature.
 - Use `EventId::key()` as the default idempotency key for database upserts.
 - Use `PaperProofEventSink` to write accepted/rejected batches. The SDK ships a
-  JSONL sink and Postgres/SQLite starter schemas; production users can implement
-  the trait with their own connection pool and upsert strategy.
+  JSONL sink, `SqliteEventSink`, `PostgresEventSink`, and SQL schemas with
+  primary-key idempotency. Production users can still implement the trait with
+  their own connection pool and upsert strategy.
 - Map `PaperProofDomainChange` into your application schema instead of relying on
   raw events alone.
 - Enable `features = ["tracing"]` to emit batch metrics through `tracing`.

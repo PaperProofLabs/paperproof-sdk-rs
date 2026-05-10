@@ -63,12 +63,15 @@ pub use events::{
     ProposalResult, PublishResult, VoteCastResult,
 };
 pub use executor::{CliExecutionOptions, CliExecutionOutput, ExecutionMode, SuiCliExecutor};
+#[cfg(feature = "async")]
+pub use indexer::CheckpointIngestionOptions;
 pub use indexer::{
-    CheckpointCursor, CheckpointData, CheckpointDataProvider, CheckpointScanOptions, EventId,
-    IndexedPaperProofEvent, IndexerCursorStore, IndexerEventBatch, IndexerProgress,
-    IndexerScanOptions, MemoryIndexerCursorStore, PackageModuleFilter, PaperProofDomainChange,
-    PaperProofIndexerClient, PaperProofIndexerState, RejectedPaperProofEvent, StoredIndexerCursor,
-    StreamId, domain_change_from_event, event_id, event_kind_counts, indexer_batch_from_page,
+    CheckpointCursor, CheckpointData, CheckpointDataProvider, CheckpointIngestionReport,
+    CheckpointScanOptions, EventId, IndexedPaperProofEvent, IndexerCursorStore, IndexerEventBatch,
+    IndexerMetrics, IndexerProgress, IndexerScanOptions, MemoryIndexerCursorStore,
+    PackageModuleFilter, PaperProofDomainChange, PaperProofIndexerClient, PaperProofIndexerState,
+    RejectedPaperProofEvent, StoredIndexerCursor, StreamId, domain_change_from_event, event_id,
+    event_kind_counts, indexer_batch_from_page,
 };
 pub use providers::{
     BuiltTransaction, DynamicFieldName, DynamicFieldObject, PaperProofDataProvider,
@@ -97,6 +100,10 @@ pub use sink::{
     JsonlEventSink, POSTGRES_SCHEMA_SQL, PaperProofEventSink, SQLITE_SCHEMA_SQL, SinkWriteSummary,
     accepted_event_to_sql_params, rejected_event_to_sql_params,
 };
+#[cfg(feature = "postgres")]
+pub use sink::{PostgresCursorStore, PostgresEventSink};
+#[cfg(feature = "sqlite")]
+pub use sink::{SqliteCursorStore, SqliteEventSink};
 #[cfg(feature = "sui-native")]
 pub use sui_native::{
     NativeBuildOptions, NativeTransaction, NativeTransactionBuilder, NativeTransactionSigner,

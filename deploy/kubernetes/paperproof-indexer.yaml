@@ -19,6 +19,14 @@ data:
   PAPERPROOF_RS_TAIL_LIMIT: "50"
   PAPERPROOF_RS_BACKFILL_LIMIT: "100"
   PAPERPROOF_RS_BACKFILL_PAGES: "10"
+  PAPERPROOF_RS_CHECKPOINT: "0"
+  PAPERPROOF_RS_CHECKPOINT_COUNT: "100"
+  PAPERPROOF_RS_CHECKPOINT_BATCH: "10"
+  PAPERPROOF_RS_CHECKPOINT_WORKERS: "4"
+  # Set PAPERPROOF_RS_CHECKPOINTS_PER_SECOND to rate-limit gRPC checkpoint ingestion.
+  PAPERPROOF_RS_SINK: "jsonl"
+  PAPERPROOF_RS_SQLITE_PATH: "/var/lib/paperproof/indexer/paperproof-indexer.sqlite"
+  # For Postgres builds, inject PAPERPROOF_RS_POSTGRES_URL from a Secret and set PAPERPROOF_RS_SINK=postgres.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

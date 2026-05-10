@@ -161,8 +161,11 @@ Core exports:
 - `CheckpointDataProvider`
 - `CheckpointData`
 - `CheckpointScanOptions`
+- `CheckpointIngestionOptions` with the `async` feature
+- `CheckpointIngestionReport`
 - `IndexerCursorStore`
 - `MemoryIndexerCursorStore`
+- `IndexerMetrics`
 - `EventId`
 - `StreamId`
 - `IndexerScanOptions`
@@ -175,6 +178,10 @@ Core exports:
 - `event_kind_counts`
 - `PaperProofEventSink`
 - `JsonlEventSink`
+- `SqliteEventSink` with the `sqlite` feature
+- `PostgresEventSink` with the `postgres` feature
+- `SqliteCursorStore` with the `sqlite` feature
+- `PostgresCursorStore` with the `postgres` feature
 - `POSTGRES_SCHEMA_SQL`
 - `SQLITE_SCHEMA_SQL`
 
@@ -217,17 +224,63 @@ for event in &batch.accepted {
 # }
 ```
 
+Concurrent checkpoint ingestion:
+
+```rust
+use std::sync::Arc;
+use paperproof_sdk_rs::{
+    CheckpointIngestionOptions, JsonlEventSink, MemoryIndexerCursorStore, PaperProofIndexerClient,
+};
+
+# async fn run<P: paperproof_sdk_rs::CheckpointDataProvider + 'static>(
+#   provider: P
+# ) -> paperproof_sdk_rs::Result<()> {
+let indexer = PaperProofIndexerClient::mainnet();
+let report = indexer.ingest_checkpoint_range_once(
+    Arc::new(provider),
+    Arc::new(JsonlEventSink::new("accepted.jsonl", "rejected.jsonl")),
+    Arc::new(MemoryIndexerCursorStore::default()),
+    CheckpointIngestionOptions {
+        checkpoint_count: 1_000,
+        batch_size: 25,
+        worker_count: 8,
+        max_checkpoints_per_second: Some(50),
+        ..Default::default()
+    },
+).await?;
+
+println!("next checkpoint: {}", report.next_checkpoint);
+# Ok(())
+# }
+```
+
+`CheckpointIngestionReport::metrics` includes processed events, rejected events,
+checkpoint lag, DB write latency, retry count, written batches, scanned
+checkpoints and duplicate skipped events.
+
 `canonical_only` defaults to `true` for indexer scans. Fake package/root events are rejected before reducers see them.
 
 Sink and CLI helpers:
 
 - `PaperProofEventSink` is the sink trait for durable writes.
 - `JsonlEventSink` writes accepted/rejected events as JSONL and is useful for backfill smoke tests.
+- `SqliteEventSink` / `PostgresEventSink` batch-upsert accepted and rejected events using `event_key` idempotency.
+- `SqliteCursorStore` / `PostgresCursorStore` persist `StoredIndexerCursor` and processed-event ids.
 - `accepted_event_to_sql_params` and `rejected_event_to_sql_params` provide typed JSON parameter maps for SQL upserts.
 - `POSTGRES_SCHEMA_SQL` and `SQLITE_SCHEMA_SQL` expose starter schemas with idempotent primary keys.
 - `examples/indexer_backfill.rs` runs a bounded backfill into JSONL.
 - `examples/indexer_tail.rs` runs a guarded polling tail loop.
 - `examples/indexer_sql_sinks.rs` prints the SQL schemas and example upsert parameters.
+
+Database features:
+
+```toml
+paperproof-sdk-rs = { version = "0.1", features = ["sqlite"] }
+paperproof-sdk-rs = { version = "0.1", features = ["postgres"] }
+```
+
+SQLite is useful for local backfills and small services. Postgres is the expected production sink for long-running,
+multi-worker indexers.
 
 Deployment helpers:
 
