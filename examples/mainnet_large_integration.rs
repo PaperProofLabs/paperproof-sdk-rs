@@ -106,14 +106,13 @@ fn main() -> paperproof_sdk_rs::Result<()> {
             format!("no ADDR_1..ADDR_4 values found in {}", env_path.display()),
         ));
     }
-    if !args.all_accounts {
-        if let Some(addr4) = accounts
+    if !args.all_accounts
+        && let Some(addr4) = accounts
             .iter()
             .find(|account| account.key == "ADDR_4")
             .cloned()
-        {
-            accounts = vec![addr4];
-        }
+    {
+        accounts = vec![addr4];
     }
 
     let client = PaperProofClient::mainnet();
@@ -264,7 +263,7 @@ fn main() -> paperproof_sdk_rs::Result<()> {
         let commenter = &accounts[(index + 1) % accounts.len()];
         let context = &mut contexts[context_index];
         let parent = context.first_comment_id.unwrap_or(0);
-        let comment = if index % 4 == 0 {
+        let comment = if index.is_multiple_of(4) {
             runner.add_blob_comment(context, commenter, parent, index)?
         } else {
             runner.add_onchain_comment(context, commenter, parent, index)?
