@@ -1,6 +1,8 @@
 // Copyright (c) 2026 PaperProof Labs
 // SPDX-License-Identifier: Apache-2.0
 
+use std::cmp::Reverse;
+
 use crate::{
     constants::{ONE_PPRF, PPRF_DECIMALS},
     error::{PaperProofError, Result},
@@ -106,7 +108,7 @@ pub fn base_units_to_pprf(value: u64) -> String {
 
 pub fn summarize_coins(owner: &str, coin_type: &str, coins: &[CoinLike]) -> CoinSummary {
     let mut sorted = coins.to_vec();
-    sorted.sort_by(|left, right| right.balance.cmp(&left.balance));
+    sorted.sort_by_key(|coin| Reverse(coin.balance));
     let total_balance = sorted
         .iter()
         .fold(0u64, |sum, coin| sum.saturating_add(coin.balance));
@@ -133,7 +135,7 @@ pub fn select_coins_covering(
         ));
     }
     let mut sorted = coins.to_vec();
-    sorted.sort_by(|left, right| right.balance.cmp(&left.balance));
+    sorted.sort_by_key(|coin| Reverse(coin.balance));
     if let Some(single) = sorted.iter().find(|coin| coin.balance >= amount) {
         return Ok(CoinSelection {
             owner: owner.to_string(),
