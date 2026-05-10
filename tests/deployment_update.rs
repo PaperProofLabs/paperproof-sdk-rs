@@ -6,9 +6,10 @@ use paperproof_sdk_rs::{
     deployment_update::{
         DeploymentDriftPolicy, DeploymentManifest, DeploymentManifestStatus, DeploymentUpdateCheck,
         check_deployment_update_with_manifest, diff_deployment, enforce_deployment_update_policy,
-        format_deployment_update_check,
+        format_deployment_update_check, default_deployment_manifest_url, manifest_from_value,
     },
 };
+use serde_json::json;
 
 #[test]
 fn detects_deployment_drift() {
@@ -18,6 +19,61 @@ fn detects_deployment_drift() {
     let diff = diff_deployment(&current, &latest);
     assert_eq!(diff.len(), 1);
     assert_eq!(diff[0].path, "packages.comments");
+}
+
+#[test]
+fn default_manifest_url_is_network_specific_and_contracts_hosted() {
+    assert_eq!(
+        default_deployment_manifest_url("mainnet"),
+        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/mainnet.json"
+    );
+    assert_eq!(
+        default_deployment_manifest_url("testnet"),
+        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/testnet.json"
+    );
+}
+
+#[test]
+fn parses_contracts_repository_manifest_shape() {
+    let current = mainnet_deployment();
+    let value = json!({
+        "schemaVersion": 1,
+        "deployment": {
+            "name": current.name,
+            "network": current.network,
+            "rpcUrl": current.rpc_url,
+            "protocolVersion": current.protocol_version,
+            "packages": {
+                "pprf": current.packages.pprf,
+                "governanceOriginal": current.packages.governance_original,
+                "governance": current.packages.governance,
+                "comments": current.packages.comments,
+                "publishing": current.packages.publishing
+            },
+            "objects": {
+                "root": current.objects.root,
+                "typeRegistry": current.objects.type_registry,
+                "feeManager": current.objects.fee_manager,
+                "governanceVault": current.objects.governance_vault,
+                "governanceConfig": current.objects.governance_config,
+                "clock": current.objects.clock
+            },
+            "coinTypes": {
+                "pprf": current.coin_types.pprf,
+                "wal": current.coin_types.wal,
+                "sui": current.coin_types.sui
+            }
+        },
+        "packageHistory": {
+            "governance": [current.packages.governance_original, current.packages.governance]
+        },
+        "updatedAt": "2026-05-08T00:00:00+08:00",
+        "minSdkVersion": "0.1.0"
+    });
+    let manifest = manifest_from_value(value).expect("manifest should parse");
+    assert_eq!(manifest.deployment, mainnet_deployment());
+    assert_eq!(manifest.updated_at.as_deref(), Some("2026-05-08T00:00:00+08:00"));
+    assert_eq!(manifest.min_sdk_version.as_deref(), Some("0.1.0"));
 }
 
 #[test]

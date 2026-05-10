@@ -46,9 +46,10 @@ pub use client::{JsonRpcClient, PaperProofClient};
 pub use constants::*;
 pub use deployment::{Deployment, DeploymentObjects, DeploymentPackages, MAINNET_DEPLOYMENT};
 pub use deployment_update::{
-    DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL, DeploymentDriftPolicy, DeploymentManifest,
-    DeploymentManifestStatus, DeploymentUpdateCheck, DeploymentUpdateDifference,
-    check_deployment_update_from_url, check_deployment_update_with_manifest, diff_deployment,
+    DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL, DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL,
+    DeploymentDriftPolicy, DeploymentManifest, DeploymentManifestStatus, DeploymentUpdateCheck,
+    DeploymentUpdateDifference, check_deployment_update_from_url,
+    check_deployment_update_with_manifest, default_deployment_manifest_url, diff_deployment,
     enforce_deployment_update_policy, format_deployment_update_check, manifest_from_value,
 };
 pub use deployment_verifier::{

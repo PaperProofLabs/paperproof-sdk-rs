@@ -9,7 +9,18 @@ use crate::{
     error::{PaperProofError, Result},
 };
 
-pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str = "https://raw.githubusercontent.com/PaperProofLabs/paperproof-sdk-ts/main/deployments/mainnet.json";
+pub const DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL: &str =
+    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments";
+pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str =
+    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/mainnet.json";
+
+pub fn default_deployment_manifest_url(network: impl AsRef<str>) -> String {
+    format!(
+        "{}/{}.json",
+        DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL,
+        network.as_ref()
+    )
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub enum DeploymentManifestStatus {
@@ -82,7 +93,7 @@ pub async fn check_deployment_update_from_url(
 ) -> DeploymentUpdateCheck {
     let current = current.unwrap_or_else(mainnet_deployment);
     let url = manifest_url.map(ToString::to_string).or_else(|| {
-        (current.network == "mainnet").then(|| DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL.to_string())
+        Some(default_deployment_manifest_url(&current.network))
     });
     let Some(url) = url else {
         return unchecked(
@@ -239,6 +250,7 @@ async fn fetch_manifest(url: &str) -> Result<DeploymentManifest> {
 }
 
 pub fn manifest_from_value(value: Value) -> Result<DeploymentManifest> {
+    let value = normalize_manifest_value(value);
     if value.get("deployment").is_some() {
         serde_json::from_value(value).map_err(Into::into)
     } else {
@@ -249,6 +261,52 @@ pub fn manifest_from_value(value: Value) -> Result<DeploymentManifest> {
             release_notes_url: None,
             message: None,
         })
+    }
+}
+
+fn normalize_manifest_value(mut value: Value) -> Value {
+    if let Some(deployment) = value.get_mut("deployment") {
+        normalize_deployment_value(deployment);
+    } else {
+        normalize_deployment_value(&mut value);
+    }
+    normalize_top_level_manifest_keys(&mut value);
+    value
+}
+
+fn normalize_top_level_manifest_keys(value: &mut Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    rename_key(object, "minSdkVersion", "min_sdk_version");
+    rename_key(object, "updatedAt", "updated_at");
+    rename_key(object, "releaseNotesUrl", "release_notes_url");
+}
+
+fn normalize_deployment_value(value: &mut Value) {
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    rename_key(object, "rpcUrl", "rpc_url");
+    rename_key(object, "protocolVersion", "protocol_version");
+    if let Some(packages) = object.get_mut("packages").and_then(Value::as_object_mut) {
+        rename_key(packages, "governanceOriginal", "governance_original");
+    }
+    if let Some(objects) = object.get_mut("objects").and_then(Value::as_object_mut) {
+        rename_key(objects, "typeRegistry", "type_registry");
+        rename_key(objects, "feeManager", "fee_manager");
+        rename_key(objects, "governanceVault", "governance_vault");
+        rename_key(objects, "governanceConfig", "governance_config");
+    }
+    rename_key(object, "coinTypes", "coin_types");
+}
+
+fn rename_key(map: &mut serde_json::Map<String, Value>, from: &str, to: &str) {
+    if map.contains_key(to) {
+        return;
+    }
+    if let Some(value) = map.remove(from) {
+        map.insert(to.to_string(), value);
     }
 }
 
