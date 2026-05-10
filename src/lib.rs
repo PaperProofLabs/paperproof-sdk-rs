@@ -37,6 +37,7 @@ pub mod types;
 pub mod validation;
 pub mod views;
 pub mod walrus;
+pub mod watch;
 
 pub use builders::{
     comments::CommentsBuilder, governance::GovernanceBuilder, ops::OpsBuilder,
@@ -109,3 +110,4 @@ pub use walrus::{
     PaperProofContentService, WalrusExtendOptions, WalrusExtendResult, WalrusTransferOptions,
     WalrusTransferResult, WalrusWriteOptions,
 };
+pub use watch::{PaperProofEventWatcher, PaperProofWatchClient, WatchOptions};

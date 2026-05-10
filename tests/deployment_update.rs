@@ -5,8 +5,8 @@ use paperproof_sdk_rs::{
     deployment::mainnet_deployment,
     deployment_update::{
         DeploymentDriftPolicy, DeploymentManifest, DeploymentManifestStatus, DeploymentUpdateCheck,
-        check_deployment_update_with_manifest, diff_deployment, enforce_deployment_update_policy,
-        format_deployment_update_check, default_deployment_manifest_url, manifest_from_value,
+        check_deployment_update_with_manifest, default_deployment_manifest_url, diff_deployment,
+        enforce_deployment_update_policy, format_deployment_update_check, manifest_from_value,
     },
 };
 use serde_json::json;
@@ -72,7 +72,10 @@ fn parses_contracts_repository_manifest_shape() {
     });
     let manifest = manifest_from_value(value).expect("manifest should parse");
     assert_eq!(manifest.deployment, mainnet_deployment());
-    assert_eq!(manifest.updated_at.as_deref(), Some("2026-05-08T00:00:00+08:00"));
+    assert_eq!(
+        manifest.updated_at.as_deref(),
+        Some("2026-05-08T00:00:00+08:00")
+    );
     assert_eq!(manifest.min_sdk_version.as_deref(), Some("0.1.0"));
 }
 

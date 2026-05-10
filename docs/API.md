@@ -80,6 +80,47 @@ Event query filters support sender, package, package+module, event type and move
 
 Note: the official Sui Rust SDK path used by this crate's `sui-native` feature is gRPC-oriented and does not support JSON-RPC. The SDK's `JsonRpcClient` is a small `reqwest` compatibility adapter kept for migration/backfill scenarios. Do not treat it as the recommended or default transport for new services.
 
+## Watch Layer
+
+`PaperProofWatchClient` wraps `PaperProofQueryClient` with polling watchers for scripts, bots, and lightweight services.
+It is intentionally small: applications drive `next().await` on their own schedule, while the watcher retains cursor and
+dedupe state.
+
+```rust
+use paperproof_sdk_rs::{PaperProofWatchClient, WatchOptions};
+
+# async fn run() -> paperproof_sdk_rs::Result<()> {
+let watch = PaperProofWatchClient::mainnet();
+let mut watcher = watch.watch_artifact_published_events(WatchOptions {
+    limit: Some(20),
+    ..Default::default()
+});
+
+let page = watcher.next().await?;
+println!("new events={}", page.data.len());
+# Ok(())
+# }
+```
+
+Named helpers include:
+
+- `watch_artifact_published_events`
+- `watch_artifact_version_added_events`
+- `watch_comment_added_events`
+- `watch_paper_liked_events`
+- `watch_paper_unliked_events`
+- `watch_status_changed_events`
+- `watch_owner_transferred_events`
+- `watch_governance_proposal_created_events`
+- `watch_governance_vote_cast_events`
+- `watch_governance_finalized_events`
+- `watch_governance_executed_events`
+- `watch_governance_expired_events`
+- `watch_governance_vote_claimed_events`
+
+Governance watchers query the current and original governance packages and canonical-filter the result, which prevents
+frontends and indexers from accidentally reporting empty governance history after an upgrade.
+
 Typed view helpers convert raw Move object fields into stable Rust structs:
 
 - `PaperProofRootView`

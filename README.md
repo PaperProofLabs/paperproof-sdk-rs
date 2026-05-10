@@ -116,6 +116,8 @@ as the default transport for new services.
 - `PaperProofQueryClient` for paginated event queries, canonical event filtering,
   all-page collection helpers, GraphQL-first historical queries, governance
   history helpers and typed event extraction.
+- `PaperProofWatchClient` for polling event watchers with cursors, dedupe, and
+  high-level publishing/comment/governance/status/owner event helpers.
 - Typed view structs for common PaperProof on-chain objects.
 - `PaperProofService` for script-friendly high-level operations backed by the
   Sui CLI executor.
@@ -320,6 +322,34 @@ clear `EventParse` error when a user combines incompatible filters such as
 For new indexers, prefer checkpoint/subscription ingestion through the native
 Sui gRPC stack or a custom provider. Use JSON-RPC only as an explicitly chosen,
 deprecated backfill compatibility path.
+
+## Watch API
+
+`PaperProofWatchClient` is a lightweight polling layer over `PaperProofQueryClient`. It gives Rust bots, services, and
+simple indexers a protocol-aware way to poll events without hand-building Move event type strings.
+
+```rust
+use paperproof_sdk_rs::{PaperProofWatchClient, WatchOptions};
+
+# async fn run() -> paperproof_sdk_rs::Result<()> {
+let watch = PaperProofWatchClient::mainnet();
+let mut watcher = watch.watch_comment_added_events(WatchOptions {
+    limit: Some(20),
+    ..Default::default()
+});
+
+let page = watcher.next().await?;
+for event in page.data {
+    println!("{} {:?}", event.transaction_digest.unwrap_or_default(), event.parsed_json);
+}
+# Ok(())
+# }
+```
+
+Watchers retain their cursor and deduplicate by transaction digest plus event sequence. High-level helpers cover
+publishing, add-version, comments, likes, status changes, owner transfers, and governance lifecycle events. Governance
+watchers query both the current and original governance packages, so upgraded deployments do not look like they have no
+historical votes.
 
 ## Deployment Drift Checks
 
