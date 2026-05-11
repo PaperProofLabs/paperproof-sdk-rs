@@ -9,7 +9,7 @@ use std::{
 };
 
 use paperproof_sdk_rs::{
-    JsonRpcClient, PaperProofQueryClient, PaperProofWatchClient, WatchOptions,
+    EventTrustLevel, JsonRpcClient, PaperProofQueryClient, PaperProofWatchClient, WatchOptions,
     deployment::mainnet_deployment,
 };
 use serde_json::{Value, json};
@@ -30,7 +30,15 @@ fn mock_query_client(calls: Arc<Mutex<Vec<String>>>, responses: usize) -> PaperP
             let event_type = value
                 .pointer("/params/0/MoveEventType")
                 .and_then(Value::as_str)
-                .unwrap_or_default()
+                .unwrap_or_else(|| {
+                    Box::leak(
+                        format!(
+                            "{}::publishing::ArtifactPublishedEvent",
+                            mainnet_deployment().packages.publishing
+                        )
+                        .into_boxed_str(),
+                    )
+                })
                 .to_string();
             calls.lock().expect("calls").push(event_type.clone());
             let package_id = event_type.split("::").next().unwrap_or_default();
@@ -47,7 +55,13 @@ fn mock_query_client(calls: Arc<Mutex<Vec<String>>>, responses: usize) -> PaperP
                         "type": event_type,
                         "parsedJson": {
                             "root_id": mainnet_deployment().objects.root,
-                            "registry_id": mainnet_deployment().objects.root
+                            "registry_id": mainnet_deployment().objects.root,
+                            "series_id": "0x1111",
+                            "version_id": "0x2222",
+                            "comments_tree_id": "0x3333",
+                            "likes_book_id": "0x4444",
+                            "target_series_id": "0x1111",
+                            "comment_id": "1"
                         }
                     }],
                     "nextCursor": null,
@@ -65,6 +79,54 @@ fn mock_query_client(calls: Arc<Mutex<Vec<String>>>, responses: usize) -> PaperP
     });
     let deployment = mainnet_deployment();
     PaperProofQueryClient::new_jsonrpc(JsonRpcClient::new(format!("http://{addr}")), deployment)
+}
+
+#[tokio::test]
+async fn watch_verified_events_returns_trust_reports() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let query = mock_query_client(calls, 2);
+    let watch = PaperProofWatchClient::new(query);
+    let page = watch
+        .watch_verified_events(WatchOptions {
+            limit: Some(1),
+            ..Default::default()
+        })
+        .next()
+        .await
+        .expect("verified watch");
+    assert_eq!(page.trust, EventTrustLevel::Verified);
+    assert_eq!(page.incomplete.len(), 1);
+    assert_eq!(page.data.len(), 0);
+}
+
+#[tokio::test]
+async fn verified_typed_watch_helper_applies_move_event_filter() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let query = mock_query_client(calls.clone(), 1);
+    let watch = PaperProofWatchClient::new(query);
+    let page = watch
+        .watch_verified_publishing_events(
+            "ArtifactStatusChangedEvent",
+            WatchOptions {
+                limit: Some(1),
+                ..Default::default()
+            },
+            true,
+            false,
+        )
+        .next()
+        .await
+        .expect("verified typed watch");
+    let deployment = mainnet_deployment();
+    assert_eq!(
+        *calls.lock().unwrap(),
+        vec![format!(
+            "{}::publishing::ArtifactStatusChangedEvent",
+            deployment.packages.publishing
+        )]
+    );
+    assert_eq!(page.trust, EventTrustLevel::Verified);
+    assert_eq!(page.incomplete.len(), 1);
 }
 
 #[tokio::test]

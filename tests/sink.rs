@@ -5,8 +5,12 @@
 use paperproof_sdk_rs::indexer::{IndexerCursorStore, StoredIndexerCursor, StreamId};
 use paperproof_sdk_rs::{
     EventId, IndexedPaperProofEvent, POSTGRES_SCHEMA_SQL, PaperProofEventSink, SQLITE_SCHEMA_SQL,
-    accepted_event_to_sql_params, deployment::mainnet_deployment, events::SuiEventEnvelope,
-    events_trust::EventTrustResult, indexer::IndexerEventBatch, sink::JsonlEventSink,
+    accepted_event_to_sql_params,
+    deployment::mainnet_deployment,
+    events::SuiEventEnvelope,
+    events_trust::{EventTrustLevel, EventTrustResult, verification_report_from_canonical_check},
+    indexer::IndexerEventBatch,
+    sink::JsonlEventSink,
 };
 use serde_json::json;
 
@@ -89,6 +93,19 @@ async fn sqlite_event_sink_batch_upserts_and_skips_duplicates() {
 
 fn mock_event() -> IndexedPaperProofEvent {
     let deployment = mainnet_deployment();
+    let event = SuiEventEnvelope {
+        id: Some(json!({ "txDigest": "digest", "eventSeq": "0", "checkpoint": 1 })),
+        package_id: deployment.packages.publishing.clone(),
+        transaction_module: "publishing".to_string(),
+        sender: "0x1".to_string(),
+        event_type: format!(
+            "{}::publishing::ArtifactPublishedEvent",
+            deployment.packages.publishing
+        ),
+        parsed_json: json!({ "root_id": deployment.objects.root }),
+        bcs: None,
+        timestamp_ms: Some("1700000000000".to_string()),
+    };
     IndexedPaperProofEvent {
         id: EventId {
             checkpoint: Some(1),
@@ -101,24 +118,14 @@ fn mock_event() -> IndexedPaperProofEvent {
                 deployment.packages.publishing
             ),
         },
-        event: SuiEventEnvelope {
-            id: Some(json!({ "txDigest": "digest", "eventSeq": "0", "checkpoint": 1 })),
-            package_id: deployment.packages.publishing.clone(),
-            transaction_module: "publishing".to_string(),
-            sender: "0x1".to_string(),
-            event_type: format!(
-                "{}::publishing::ArtifactPublishedEvent",
-                deployment.packages.publishing
-            ),
-            parsed_json: json!({ "root_id": deployment.objects.root }),
-            bcs: None,
-            timestamp_ms: Some("1700000000000".to_string()),
-        },
+        verification: verification_report_from_canonical_check(
+            &event,
+            &deployment,
+            EventTrustLevel::Canonical,
+        ),
+        event,
         kind: paperproof_sdk_rs::events::PaperProofEventKind::ArtifactPublished,
-        trust: EventTrustResult {
-            trusted: true,
-            reason: None,
-        },
+        trust: EventTrustResult::trusted(),
     }
 }
 

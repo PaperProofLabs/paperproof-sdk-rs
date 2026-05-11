@@ -114,8 +114,9 @@ as the default transport for new services.
 - Full `PaperProofReadClient` for canonical objects, series, versions, comments,
   likes, governance proposals, dynamic fields, balances and coin pages.
 - `PaperProofQueryClient` for paginated event queries, canonical event filtering,
-  all-page collection helpers, GraphQL-first historical queries, governance
-  history helpers and typed event extraction.
+  raw/canonical/verified trust reports, all-page collection helpers,
+  GraphQL-first historical queries, governance history helpers and typed event
+  extraction.
 - `PaperProofWatchClient` for polling event watchers with cursors, dedupe, and
   high-level publishing/comment/governance/status/owner event helpers.
 - Typed view structs for common PaperProof on-chain objects.
@@ -142,7 +143,9 @@ as the default transport for new services.
 - Optional `tracing` metrics for indexer scan batches.
 - Robust retry helpers and Move abort explanations for friendlier failure logs.
 - Event parser and trust filter so indexers can reject events from fake packages
-  or wrong canonical objects.
+  or wrong canonical objects. Verified query helpers can also read referenced
+  PaperProof objects and surface `incomplete` instead of letting apps mistake
+  provider/read failures for empty protocol state.
 - Walrus HTTP helper for blob reads, writes and SHA-256 verification.
 - Coin amount helpers and coin selection utilities for PPRF/SUI/WAL workflows.
 
@@ -308,6 +311,42 @@ println!("events={}", page.data.len());
 # }
 ```
 
+For stronger trust boundaries, query with an explicit trust level. `raw` only
+parses provider output, `canonical` checks package/root and event shape, and
+`verified` also reads referenced PaperProof objects such as series, versions,
+comment trees, likes books and governance proposals.
+
+Use `canonical` for ordinary display feeds. Use `verified` for statistics,
+governance history, rewards, airdrop snapshots, and trusted indexer state. On
+those paths, call `require_verified_page(page)` or `assert_no_incomplete(&page)`
+before deriving business state.
+
+```rust
+use paperproof_sdk_rs::{EventTrustLevel, TrustedEventQueryInput};
+
+# async fn run() -> paperproof_sdk_rs::Result<()> {
+let query = PaperProofQueryClient::mainnet();
+let page = query.query_trusted_events(TrustedEventQueryInput {
+    query: EventQueryInput {
+        move_event_type: Some(format!(
+            "{}::publishing::ArtifactPublishedEvent",
+            query.deployment.packages.publishing
+        )),
+        ..Default::default()
+    },
+    trust: EventTrustLevel::Verified,
+    include_rejected: true,
+    verify_walrus: false,
+}).await?;
+
+for report in &page.verification {
+    println!("{:?} {:?}", report.status, report.issues);
+}
+let page = paperproof_sdk_rs::require_verified_page(page)?;
+# Ok(())
+# }
+```
+
 For long-running indexers, prefer the dedicated indexer helpers:
 
 ```rust
@@ -385,6 +424,10 @@ Watchers retain their cursor and deduplicate by transaction digest plus event se
 publishing, add-version, comments, likes, status changes, owner transfers, and governance lifecycle events. Governance
 watchers query both the current and original governance packages, so upgraded deployments do not look like they have no
 historical votes.
+
+Use `watch_verified_events` when the consumer must avoid accepting events whose
+object bindings cannot be confirmed. The returned `TrustedEventPage` includes
+`verification`, `rejected`, and `incomplete` reports.
 
 ## Deployment Drift Checks
 

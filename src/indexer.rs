@@ -17,14 +17,18 @@ use serde_json::{Value, json};
 
 use crate::{
     deployment::Deployment,
-    error::Result,
+    error::{PaperProofError, Result},
     events::{PaperProofEventKind, SuiEventEnvelope, parse_event},
-    events_trust::{EventTrustResult, check_canonical_paperproof_event},
-    query::{EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient},
+    events_trust::{
+        EventTrustLevel, EventTrustResult, EventVerificationReport,
+        check_canonical_paperproof_event, verification_report_from_canonical_check,
+    },
+    query::{
+        EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient, TrustedEventQueryInput,
+    },
 };
 #[cfg(feature = "async")]
 use crate::{
-    error::PaperProofError,
     robust::{RetryOptions, default_retryable},
     sink::PaperProofEventSink,
 };
@@ -193,6 +197,7 @@ pub struct IndexedPaperProofEvent {
     pub event: SuiEventEnvelope,
     pub kind: PaperProofEventKind,
     pub trust: EventTrustResult,
+    pub verification: EventVerificationReport,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -353,11 +358,45 @@ pub trait CheckpointDataProvider: Send + Sync {
     async fn get_checkpoint_data(&self, sequence_number: u64) -> Result<CheckpointData>;
 }
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexerTrustPolicy {
+    Raw,
+    #[default]
+    Canonical,
+    Verified,
+    VerifiedWithWalrus,
+}
+
+impl IndexerTrustPolicy {
+    pub fn from_canonical_only(canonical_only: bool) -> Self {
+        if canonical_only {
+            Self::Canonical
+        } else {
+            Self::Raw
+        }
+    }
+
+    pub fn event_trust_level(&self) -> EventTrustLevel {
+        match self {
+            Self::Raw => EventTrustLevel::Raw,
+            Self::Canonical => EventTrustLevel::Canonical,
+            Self::Verified | Self::VerifiedWithWalrus => EventTrustLevel::Verified,
+        }
+    }
+
+    pub fn verify_walrus(&self) -> bool {
+        matches!(self, Self::VerifiedWithWalrus)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct CheckpointScanOptions {
     pub start_checkpoint: u64,
     pub limit: u64,
     pub canonical_only: bool,
+    #[serde(default)]
+    pub trust_policy: IndexerTrustPolicy,
 }
 
 #[cfg(feature = "async")]
@@ -370,6 +409,7 @@ pub struct CheckpointIngestionOptions {
     pub max_checkpoints_per_second: Option<u64>,
     pub retry: RetryOptions,
     pub canonical_only: bool,
+    pub trust_policy: IndexerTrustPolicy,
 }
 
 #[cfg(feature = "async")]
@@ -383,6 +423,7 @@ impl Default for CheckpointIngestionOptions {
             max_checkpoints_per_second: None,
             retry: RetryOptions::default(),
             canonical_only: true,
+            trust_policy: IndexerTrustPolicy::Canonical,
         }
     }
 }
@@ -419,6 +460,7 @@ impl Default for CheckpointScanOptions {
             start_checkpoint: 0,
             limit: 10,
             canonical_only: true,
+            trust_policy: IndexerTrustPolicy::Canonical,
         }
     }
 }
@@ -427,6 +469,8 @@ impl Default for CheckpointScanOptions {
 pub struct IndexerScanOptions {
     pub filter: EventQueryInput,
     pub canonical_only: bool,
+    #[serde(default)]
+    pub trust_policy: IndexerTrustPolicy,
 }
 
 impl Default for IndexerScanOptions {
@@ -441,6 +485,7 @@ impl Default for IndexerScanOptions {
                 ..Default::default()
             },
             canonical_only: true,
+            trust_policy: IndexerTrustPolicy::Canonical,
         }
     }
 }
@@ -1064,10 +1109,31 @@ impl PaperProofIndexerClient {
         #[cfg(feature = "tracing")]
         tracing::info!(
             canonical_only = options.canonical_only,
+            trust_policy = ?options.trust_policy,
             "paperproof indexer scan_once started"
         );
-        let page = self.query.query_events(options.filter).await?;
-        let batch = indexer_batch_from_page(page, &self.query.deployment, options.canonical_only);
+        let batch = match options.trust_policy {
+            IndexerTrustPolicy::Raw | IndexerTrustPolicy::Canonical => {
+                let page = self.query.query_events(options.filter).await?;
+                indexer_batch_from_page_with_policy(
+                    page,
+                    &self.query.deployment,
+                    options.trust_policy,
+                )
+            }
+            IndexerTrustPolicy::Verified | IndexerTrustPolicy::VerifiedWithWalrus => {
+                let trusted = self
+                    .query
+                    .query_trusted_events(TrustedEventQueryInput {
+                        query: options.filter,
+                        trust: EventTrustLevel::Verified,
+                        include_rejected: true,
+                        verify_walrus: options.trust_policy.verify_walrus(),
+                    })
+                    .await?;
+                indexer_batch_from_trusted_page(trusted)
+            }
+        };
         emit_batch_metrics("event_query", &batch);
         Ok(batch)
     }
@@ -1090,6 +1156,7 @@ impl PaperProofIndexerClient {
                 ..Default::default()
             },
             canonical_only: true,
+            trust_policy: IndexerTrustPolicy::Canonical,
         })
         .await
     }
@@ -1102,11 +1169,13 @@ impl PaperProofIndexerClient {
     where
         P: CheckpointDataProvider,
     {
+        reject_verified_checkpoint_policy(&options.trust_policy)?;
         #[cfg(feature = "tracing")]
         tracing::info!(
             start_checkpoint = options.start_checkpoint,
             limit = options.limit,
             canonical_only = options.canonical_only,
+            trust_policy = ?options.trust_policy,
             "paperproof indexer checkpoint scan started"
         );
         let mut events = Vec::new();
@@ -1130,7 +1199,8 @@ impl PaperProofIndexerClient {
                 "checkpoints": raw_checkpoints,
             }),
         };
-        let batch = indexer_batch_from_page(page, &self.query.deployment, options.canonical_only);
+        let policy = checkpoint_policy(options.canonical_only, options.trust_policy);
+        let batch = indexer_batch_from_page_with_policy(page, &self.query.deployment, policy);
         emit_batch_metrics("checkpoint", &batch);
         Ok(batch)
     }
@@ -1190,7 +1260,8 @@ impl PaperProofIndexerClient {
             let deployment = self.query.deployment.clone();
             let retry = retry.clone();
             let stream = stream.clone();
-            let canonical_only = options.canonical_only;
+            reject_verified_checkpoint_policy(&options.trust_policy)?;
+            let trust_policy = checkpoint_policy(options.canonical_only, options.trust_policy.clone());
             handles.push(tokio::spawn(async move {
                 loop {
                     let start = next_job_checkpoint.fetch_add(batch_size, Ordering::SeqCst);
@@ -1207,7 +1278,7 @@ impl PaperProofIndexerClient {
                         provider.as_ref(),
                         &deployment,
                         &retry,
-                        canonical_only,
+                        trust_policy.clone(),
                         &metrics,
                         job,
                     )
@@ -1337,7 +1408,7 @@ async fn checkpoint_job_with_retries<P>(
     provider: &P,
     deployment: &Deployment,
     retry: &RetryOptions,
-    canonical_only: bool,
+    trust_policy: IndexerTrustPolicy,
     metrics: &IndexerMetricsAtomic,
     job: CheckpointJob,
 ) -> Result<IndexerEventBatch>
@@ -1347,7 +1418,7 @@ where
     let attempts = retry.attempts.max(1);
     let mut last_error = None;
     for attempt in 1..=attempts {
-        match checkpoint_job_once(provider, deployment, canonical_only, &job).await {
+        match checkpoint_job_once(provider, deployment, trust_policy.clone(), &job).await {
             Ok(batch) => return Ok(batch),
             Err(error) => {
                 if attempt >= attempts || !is_indexer_retryable(retry, &error) {
@@ -1382,7 +1453,7 @@ where
 async fn checkpoint_job_once<P>(
     provider: &P,
     deployment: &Deployment,
-    canonical_only: bool,
+    trust_policy: IndexerTrustPolicy,
     job: &CheckpointJob,
 ) -> Result<IndexerEventBatch>
 where
@@ -1409,7 +1480,11 @@ where
             "checkpoints": raw_checkpoints,
         }),
     };
-    Ok(indexer_batch_from_page(page, deployment, canonical_only))
+    Ok(indexer_batch_from_page_with_policy(
+        page,
+        deployment,
+        trust_policy,
+    ))
 }
 
 #[cfg(feature = "async")]
@@ -1455,10 +1530,24 @@ pub fn indexer_batch_from_page(
     deployment: &Deployment,
     canonical_only: bool,
 ) -> IndexerEventBatch {
+    indexer_batch_from_page_with_policy(
+        page,
+        deployment,
+        IndexerTrustPolicy::from_canonical_only(canonical_only),
+    )
+}
+
+pub fn indexer_batch_from_page_with_policy(
+    page: EventPage<SuiEventEnvelope>,
+    deployment: &Deployment,
+    trust_policy: IndexerTrustPolicy,
+) -> IndexerEventBatch {
     let mut accepted = Vec::new();
     let mut rejected = Vec::new();
     let mut last_event_id = None;
     let mut last_timestamp_ms = None;
+    let accept_uncanonical = trust_policy == IndexerTrustPolicy::Raw;
+    let report_trust = trust_policy.event_trust_level();
     for event in page.data {
         last_event_id = event.id.clone();
         last_timestamp_ms = event
@@ -1467,10 +1556,15 @@ pub fn indexer_batch_from_page(
             .and_then(|value| value.parse::<u64>().ok())
             .or(last_timestamp_ms);
         let trust = check_canonical_paperproof_event(&event, deployment);
-        if trust.trusted || !canonical_only {
+        if trust.trusted || accept_uncanonical {
             let id = event_id(&event);
             accepted.push(IndexedPaperProofEvent {
                 kind: parse_event(&event).kind,
+                verification: verification_report_from_canonical_check(
+                    &event,
+                    deployment,
+                    report_trust.clone(),
+                ),
                 event,
                 trust,
                 id,
@@ -1499,6 +1593,82 @@ pub fn indexer_batch_from_page(
         rejected,
         raw: page.raw,
     }
+}
+
+pub fn indexer_batch_from_trusted_page(page: crate::query::TrustedEventPage) -> IndexerEventBatch {
+    let mut accepted = Vec::new();
+    let mut rejected = Vec::new();
+    let mut last_event_id = None;
+    let mut last_timestamp_ms = None;
+    for report in page.verification {
+        let event = report.event.clone();
+        last_event_id = event.id.clone();
+        last_timestamp_ms = event
+            .timestamp_ms
+            .as_deref()
+            .and_then(|value| value.parse::<u64>().ok())
+            .or(last_timestamp_ms);
+        if report.trusted {
+            let id = event_id(&event);
+            accepted.push(IndexedPaperProofEvent {
+                kind: parse_event(&event).kind,
+                trust: EventTrustResult {
+                    trusted: true,
+                    reason: None,
+                    status: report.status.clone(),
+                    issues: report.issues.clone(),
+                },
+                verification: report,
+                event,
+                id,
+            });
+        } else {
+            rejected.push(RejectedPaperProofEvent {
+                event,
+                reason: report
+                    .issues
+                    .first()
+                    .map(|issue| issue.reason.clone())
+                    .unwrap_or_else(|| {
+                        "event did not satisfy requested indexer trust policy".to_string()
+                    }),
+            });
+        }
+    }
+    IndexerEventBatch {
+        progress: IndexerProgress {
+            cursor: page.next_cursor,
+            has_next_page: page.has_next_page,
+            scanned_pages: 1,
+            scanned_events: (accepted.len() + rejected.len()) as u64,
+            accepted_events: accepted.len() as u64,
+            rejected_events: rejected.len() as u64,
+            last_event_id,
+            last_timestamp_ms,
+        },
+        accepted,
+        rejected,
+        raw: page.raw,
+    }
+}
+
+fn checkpoint_policy(canonical_only: bool, trust_policy: IndexerTrustPolicy) -> IndexerTrustPolicy {
+    match trust_policy {
+        other if canonical_only => other,
+        _ => IndexerTrustPolicy::Raw,
+    }
+}
+
+fn reject_verified_checkpoint_policy(trust_policy: &IndexerTrustPolicy) -> Result<()> {
+    if matches!(
+        trust_policy,
+        IndexerTrustPolicy::Verified | IndexerTrustPolicy::VerifiedWithWalrus
+    ) {
+        return Err(PaperProofError::event_verification(
+            "checkpoint ingestion cannot silently satisfy verified trust policy because raw checkpoint data lacks object-binding reads; use query-based verified scans or request canonical checkpoint ingestion explicitly",
+        ));
+    }
+    Ok(())
 }
 
 pub fn event_kind_counts(events: &[IndexedPaperProofEvent]) -> BTreeMap<PaperProofEventKind, u64> {

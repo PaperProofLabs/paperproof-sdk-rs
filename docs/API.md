@@ -62,6 +62,8 @@ Provider interfaces:
 
 - `query_events`
 - `query_canonical_events`
+- `query_trusted_events`
+- `query_verified_events`
 - `query_all_events`
 - `query_governance_proposal_created_events`
 - `query_governance_vote_cast_events`
@@ -75,6 +77,24 @@ Provider interfaces:
 `PaperProofQueryClient::mainnet()` is GraphQL-first. Governance helpers query both the current and original governance
 packages, filter by the configured PaperProof root/registry id, and deduplicate by transaction digest plus event
 sequence. Frontends and indexers should prefer these helpers over single-package hand-built event queries.
+
+`query_trusted_events` adds a protocol trust layer:
+
+- `EventTrustLevel::Raw`: parse provider output without business trust.
+- `EventTrustLevel::Canonical`: verify configured package/root/registry ids and required event fields.
+- `EventTrustLevel::Verified`: canonical checks plus object binding reads for series/version, comment tree, likes book
+  and governance proposal relationships.
+
+The returned `TrustedEventPage` carries `verification`, `rejected` and `incomplete` reports. Treat `incomplete` as
+unknown data, not as an empty protocol state.
+
+Use `canonical` for ordinary display feeds. Use `verified` for statistics, governance history, rewards, airdrop snapshots,
+and trusted indexer state. `require_verified_page(page)` and `assert_no_incomplete(&page)` are provided as one-line guards
+for these critical paths.
+
+Checkpoint ingestion never silently downgrades a requested verified policy. If `IndexerTrustPolicy::Verified` or
+`VerifiedWithWalrus` is requested on raw checkpoint ingestion, the SDK returns an event verification error; use query-based
+verified scans or explicitly request canonical checkpoint ingestion.
 
 Event query filters support sender, package, package+module, event type and move event type. Incompatible Sui query combinations return `EventParse` errors before sending a request.
 
@@ -117,9 +137,11 @@ Named helpers include:
 - `watch_governance_executed_events`
 - `watch_governance_expired_events`
 - `watch_governance_vote_claimed_events`
+- `watch_verified_events`
 
 Governance watchers query the current and original governance packages and canonical-filter the result, which prevents
 frontends and indexers from accidentally reporting empty governance history after an upgrade.
+Verified watchers return `TrustedEventPage` so consumers can inspect accepted, rejected and incomplete reports.
 
 Typed view helpers convert raw Move object fields into stable Rust structs:
 
@@ -146,6 +168,8 @@ The SDK provides:
 
 - event classification with `parse_event`;
 - canonical package filtering with `validate_event_trust`;
+- trust reports with `verification_report_from_canonical_check`;
+- object-binding verification with `PaperProofEventVerifier`;
 - typed result extraction for publish, add-version, comments, likes, votes, proposal lifecycle, status changes and owner transfers.
 
 Indexers should filter by official package id and canonical object ids. Event names alone are not a trust boundary.

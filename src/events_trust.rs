@@ -2,17 +2,132 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{
     deployment::Deployment,
+    error::{PaperProofError, Result},
     events::{SuiEventEnvelope, event_struct_name},
 };
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventTrustLevel {
+    Raw,
+    #[default]
+    Canonical,
+    Verified,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventVerificationStatus {
+    Raw,
+    Canonical,
+    Verified,
+    Rejected,
+    Incomplete,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventIssueSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct EventVerificationIssue {
+    pub code: String,
+    pub reason: String,
+    pub severity: EventIssueSeverity,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<Value>,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct EventTrustResult {
     pub trusted: bool,
     pub reason: Option<String>,
+    #[serde(default = "default_canonical_status")]
+    pub status: EventVerificationStatus,
+    #[serde(default)]
+    pub issues: Vec<EventVerificationIssue>,
+}
+
+impl EventTrustResult {
+    pub fn trusted() -> Self {
+        trusted()
+    }
+
+    pub fn rejected(reason: impl Into<String>) -> Self {
+        untrusted(reason)
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct EventVerificationReport {
+    pub event: SuiEventEnvelope,
+    pub requested_trust: EventTrustLevel,
+    pub status: EventVerificationStatus,
+    pub trusted: bool,
+    pub canonical: bool,
+    pub verified: bool,
+    pub issues: Vec<EventVerificationIssue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub bindings: serde_json::Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TrustedSuiEventEnvelope {
+    pub event: SuiEventEnvelope,
+    pub trust: EventVerificationStatus,
+    pub verification: EventVerificationReport,
+}
+
+pub trait VerifiedEventPageGuard {
+    fn trust_level(&self) -> EventTrustLevel;
+    fn verification_reports(&self) -> &[EventVerificationReport];
+}
+
+pub fn assert_no_incomplete<P>(page: &P) -> Result<()>
+where
+    P: VerifiedEventPageGuard,
+{
+    let reports = page.verification_reports();
+    let incomplete = reports
+        .iter()
+        .filter(|report| report.status == EventVerificationStatus::Incomplete)
+        .count();
+    let rejected = reports
+        .iter()
+        .filter(|report| report.status == EventVerificationStatus::Rejected)
+        .count();
+    let unverified = reports.iter().filter(|report| !report.verified).count();
+    if page.trust_level() != EventTrustLevel::Verified
+        || incomplete > 0
+        || rejected > 0
+        || unverified > 0
+    {
+        return Err(PaperProofError::event_verification(format!(
+            "PaperProof page is not fully verified: trust={:?}, incomplete={}, rejected={}, unverified={}",
+            page.trust_level(),
+            incomplete,
+            rejected,
+            unverified
+        )));
+    }
+    Ok(())
+}
+
+pub fn require_verified_page<P>(page: P) -> Result<P>
+where
+    P: VerifiedEventPageGuard,
+{
+    assert_no_incomplete(&page)?;
+    Ok(page)
 }
 
 pub fn validate_event_trust(event: &SuiEventEnvelope, deployment: &Deployment) -> EventTrustResult {
@@ -28,32 +143,35 @@ pub fn check_canonical_paperproof_event(
     deployment: &Deployment,
 ) -> EventTrustResult {
     if !package_trusted(event, deployment) {
-        return EventTrustResult {
-            trusted: false,
-            reason: Some(format!(
+        return untrusted_with_code(
+            "PACKAGE_NOT_CONFIGURED",
+            format!(
                 "event package {} is not a configured PaperProof package",
                 event.package_id
-            )),
-        };
+            ),
+            Some(json!({ "package_id": event.package_id })),
+        );
     }
 
     if field_as_str(&event.parsed_json, "root_id")
         .or_else(|| field_as_str(&event.parsed_json, "root"))
         .is_some_and(|root| !same_id(root, &deployment.objects.root))
     {
-        return EventTrustResult {
-            trusted: false,
-            reason: Some("event root id does not match the deployment root".to_string()),
-        };
+        return untrusted_with_code(
+            "ROOT_MISMATCH",
+            "event root id does not match the deployment root",
+            Some(json!({ "expected": deployment.objects.root })),
+        );
     }
 
     if let Some(registry) = field_as_str(&event.parsed_json, "registry_id")
         && !same_id(registry, &deployment.objects.root)
     {
-        return EventTrustResult {
-            trusted: false,
-            reason: Some("event registry id does not match the deployment root".to_string()),
-        };
+        return untrusted_with_code(
+            "REGISTRY_MISMATCH",
+            "event registry id does not match the deployment root",
+            Some(json!({ "expected": deployment.objects.root, "actual": registry })),
+        );
     }
 
     let fields = &event.parsed_json;
@@ -93,6 +211,46 @@ pub fn check_canonical_paperproof_event(
             "proposal event is missing registry_id/proposal_object_id",
         ),
         _ => trusted(),
+    }
+}
+
+pub fn verification_report_from_canonical_check(
+    event: &SuiEventEnvelope,
+    deployment: &Deployment,
+    requested_trust: EventTrustLevel,
+) -> EventVerificationReport {
+    if requested_trust == EventTrustLevel::Raw {
+        return EventVerificationReport {
+            event: event.clone(),
+            requested_trust,
+            status: EventVerificationStatus::Raw,
+            trusted: true,
+            canonical: false,
+            verified: false,
+            issues: Vec::new(),
+            provider: None,
+            bindings: serde_json::Map::new(),
+        };
+    }
+    let check = check_canonical_paperproof_event(event, deployment);
+    EventVerificationReport {
+        event: event.clone(),
+        requested_trust,
+        status: check.status.clone(),
+        trusted: check.trusted,
+        canonical: check.trusted,
+        verified: false,
+        issues: check.issues,
+        provider: None,
+        bindings: serde_json::Map::new(),
+    }
+}
+
+pub fn attach_event_verification(report: EventVerificationReport) -> TrustedSuiEventEnvelope {
+    TrustedSuiEventEnvelope {
+        trust: report.status.clone(),
+        event: report.event.clone(),
+        verification: report,
     }
 }
 
@@ -160,14 +318,36 @@ fn trusted() -> EventTrustResult {
     EventTrustResult {
         trusted: true,
         reason: None,
+        status: EventVerificationStatus::Canonical,
+        issues: Vec::new(),
     }
 }
 
 fn untrusted(reason: impl Into<String>) -> EventTrustResult {
+    untrusted_with_code("CANONICAL_REJECTED", reason, None)
+}
+
+fn untrusted_with_code(
+    code: impl Into<String>,
+    reason: impl Into<String>,
+    details: Option<Value>,
+) -> EventTrustResult {
+    let reason = reason.into();
     EventTrustResult {
         trusted: false,
-        reason: Some(reason.into()),
+        reason: Some(reason.clone()),
+        status: EventVerificationStatus::Rejected,
+        issues: vec![EventVerificationIssue {
+            code: code.into(),
+            reason,
+            severity: EventIssueSeverity::Error,
+            details,
+        }],
     }
+}
+
+fn default_canonical_status() -> EventVerificationStatus {
+    EventVerificationStatus::Canonical
 }
 
 fn same_id(left: &str, right: &str) -> bool {

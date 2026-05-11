@@ -10,8 +10,12 @@ use crate::{
     client::JsonRpcClient,
     deployment::Deployment,
     error::{PaperProofError, Result},
+    event_verifier::{PaperProofEventVerifier, VerifyEventOptions},
     events::{SuiEventEnvelope, extract_events_by_struct},
-    events_trust::validate_event_trust,
+    events_trust::{
+        EventTrustLevel, EventVerificationReport, TrustedSuiEventEnvelope,
+        attach_event_verification, validate_event_trust, verification_report_from_canonical_check,
+    },
     read::PaperProofReadClient,
     types::{ArtifactSeriesView, ArtifactVersionView, CommentsTreeView, LikesBookView},
     validation::{validate_address, validate_object_id},
@@ -25,6 +29,16 @@ pub struct PaginationInput {
     pub cursor: Option<Value>,
     pub limit: Option<u64>,
     pub descending_order: Option<bool>,
+}
+
+impl crate::events_trust::VerifiedEventPageGuard for TrustedEventPage {
+    fn trust_level(&self) -> EventTrustLevel {
+        self.trust.clone()
+    }
+
+    fn verification_reports(&self) -> &[EventVerificationReport] {
+        &self.verification
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -45,6 +59,26 @@ pub struct EventPage<T> {
     pub next_cursor: Option<Value>,
     pub has_next_page: bool,
     pub raw: Value,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct TrustedEventQueryInput {
+    pub query: EventQueryInput,
+    pub trust: EventTrustLevel,
+    pub include_rejected: bool,
+    pub verify_walrus: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct TrustedEventPage {
+    pub data: Vec<TrustedSuiEventEnvelope>,
+    pub next_cursor: Option<Value>,
+    pub has_next_page: bool,
+    pub raw: Value,
+    pub trust: EventTrustLevel,
+    pub verification: Vec<EventVerificationReport>,
+    pub rejected: Vec<EventVerificationReport>,
+    pub incomplete: Vec<EventVerificationReport>,
 }
 
 #[derive(Clone, Debug)]
@@ -257,6 +291,91 @@ impl PaperProofQueryClient {
         Ok(page)
     }
 
+    pub async fn query_trusted_events(
+        &self,
+        input: TrustedEventQueryInput,
+    ) -> Result<TrustedEventPage> {
+        let page = if input.trust == EventTrustLevel::Verified {
+            self.query_canonical_events(input.query.clone()).await?
+        } else {
+            self.query_events(input.query.clone()).await?
+        };
+        if input.trust == EventTrustLevel::Raw {
+            let reports = page
+                .data
+                .iter()
+                .map(|event| {
+                    verification_report_from_canonical_check(
+                        event,
+                        &self.deployment,
+                        EventTrustLevel::Raw,
+                    )
+                })
+                .collect::<Vec<_>>();
+            return Ok(trusted_page_from_reports(
+                page,
+                EventTrustLevel::Raw,
+                reports,
+                input.include_rejected,
+            ));
+        }
+        if input.trust == EventTrustLevel::Canonical {
+            let reports = page
+                .data
+                .iter()
+                .map(|event| {
+                    verification_report_from_canonical_check(
+                        event,
+                        &self.deployment,
+                        EventTrustLevel::Canonical,
+                    )
+                })
+                .collect::<Vec<_>>();
+            return Ok(trusted_page_from_reports(
+                page,
+                EventTrustLevel::Canonical,
+                reports,
+                input.include_rejected,
+            ));
+        }
+        let verifier = PaperProofEventVerifier::new(self.read.clone());
+        let mut reports = Vec::new();
+        for event in &page.data {
+            reports.push(
+                verifier
+                    .verify_event(
+                        event,
+                        VerifyEventOptions {
+                            trust: EventTrustLevel::Verified,
+                            verify_walrus: input.verify_walrus,
+                            provider: None,
+                        },
+                    )
+                    .await?,
+            );
+        }
+        Ok(trusted_page_from_reports(
+            page,
+            EventTrustLevel::Verified,
+            reports,
+            input.include_rejected,
+        ))
+    }
+
+    pub async fn query_verified_events(
+        &self,
+        query: EventQueryInput,
+        include_rejected: bool,
+    ) -> Result<TrustedEventPage> {
+        self.query_trusted_events(TrustedEventQueryInput {
+            query,
+            trust: EventTrustLevel::Verified,
+            include_rejected,
+            verify_walrus: false,
+        })
+        .await
+    }
+
     pub async fn query_all_events(
         &self,
         mut input: EventQueryInput,
@@ -371,6 +490,40 @@ impl PaperProofQueryClient {
     ) -> Result<EventPage<SuiEventEnvelope>> {
         self.query_governance_events("VoteClaimedEvent", input)
             .await
+    }
+}
+
+fn trusted_page_from_reports(
+    page: EventPage<SuiEventEnvelope>,
+    trust: EventTrustLevel,
+    reports: Vec<EventVerificationReport>,
+    include_rejected: bool,
+) -> TrustedEventPage {
+    let rejected = reports
+        .iter()
+        .filter(|report| report.status == crate::events_trust::EventVerificationStatus::Rejected)
+        .cloned()
+        .collect::<Vec<_>>();
+    let incomplete = reports
+        .iter()
+        .filter(|report| report.status == crate::events_trust::EventVerificationStatus::Incomplete)
+        .cloned()
+        .collect::<Vec<_>>();
+    let data = reports
+        .iter()
+        .filter(|report| include_rejected || report.trusted)
+        .cloned()
+        .map(attach_event_verification)
+        .collect();
+    TrustedEventPage {
+        data,
+        next_cursor: page.next_cursor,
+        has_next_page: page.has_next_page,
+        raw: page.raw,
+        trust,
+        verification: reports,
+        rejected,
+        incomplete,
     }
 }
 

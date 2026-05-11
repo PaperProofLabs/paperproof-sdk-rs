@@ -19,6 +19,7 @@ pub mod deployment;
 pub mod deployment_update;
 pub mod deployment_verifier;
 pub mod error;
+pub mod event_verifier;
 pub mod events;
 pub mod events_trust;
 pub mod executor;
@@ -58,9 +59,16 @@ pub use deployment_verifier::{
     verify_deployment,
 };
 pub use error::{PaperProofError, Result};
+pub use event_verifier::{PaperProofEventVerifier, VerifyEventOptions};
 pub use events::{
     AddVersionResult, CommentResult, LikeResult, ProposalExecutedResult, ProposalFinalizedResult,
     ProposalResult, PublishResult, VoteCastResult,
+};
+pub use events_trust::{
+    EventIssueSeverity, EventTrustLevel, EventTrustResult, EventVerificationIssue,
+    EventVerificationReport, EventVerificationStatus, TrustedSuiEventEnvelope,
+    VerifiedEventPageGuard, assert_no_incomplete, attach_event_verification,
+    require_verified_page, verification_report_from_canonical_check,
 };
 pub use executor::{CliExecutionOptions, CliExecutionOutput, ExecutionMode, SuiCliExecutor};
 #[cfg(feature = "async")]
@@ -68,10 +76,11 @@ pub use indexer::CheckpointIngestionOptions;
 pub use indexer::{
     CheckpointCursor, CheckpointData, CheckpointDataProvider, CheckpointIngestionReport,
     CheckpointScanOptions, EventId, IndexedPaperProofEvent, IndexerCursorStore, IndexerEventBatch,
-    IndexerMetrics, IndexerProgress, IndexerScanOptions, MemoryIndexerCursorStore,
+    IndexerMetrics, IndexerProgress, IndexerScanOptions, IndexerTrustPolicy, MemoryIndexerCursorStore,
     PackageModuleFilter, PaperProofDomainChange, PaperProofIndexerClient, PaperProofIndexerState,
     RejectedPaperProofEvent, StoredIndexerCursor, StreamId, domain_change_from_event, event_id,
-    event_kind_counts, indexer_batch_from_page,
+    event_kind_counts, indexer_batch_from_page, indexer_batch_from_page_with_policy,
+    indexer_batch_from_trusted_page,
 };
 pub use providers::{
     BuiltTransaction, DynamicFieldName, DynamicFieldObject, PaperProofDataProvider,
@@ -81,6 +90,7 @@ pub use providers::{
 pub use query::{
     EventPage, EventQueryInput, GraphQlQueryProvider, MAINNET_GRAPHQL_ENDPOINT, PaginationInput,
     PaperProofQueryClient, PaperProofQueryProvider, SeriesDetails, TESTNET_GRAPHQL_ENDPOINT,
+    TrustedEventPage, TrustedEventQueryInput,
 };
 pub use read::{Balance, CoinObject, Page, PaperProofProviderReadClient, PaperProofReadClient};
 pub use robust::{
@@ -117,4 +127,6 @@ pub use walrus::{
     PaperProofContentService, WalrusExtendOptions, WalrusExtendResult, WalrusTransferOptions,
     WalrusTransferResult, WalrusWriteOptions,
 };
-pub use watch::{PaperProofEventWatcher, PaperProofWatchClient, WatchOptions};
+pub use watch::{
+    PaperProofEventWatcher, PaperProofTrustedEventWatcher, PaperProofWatchClient, WatchOptions,
+};

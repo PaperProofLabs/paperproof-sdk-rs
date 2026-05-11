@@ -58,6 +58,7 @@ fn indexer_batch_splits_canonical_and_rejected_events() {
     assert_eq!(batch.progress.scanned_events, 2);
     assert_eq!(batch.progress.accepted_events, 1);
     assert_eq!(batch.progress.rejected_events, 1);
+    assert!(batch.accepted[0].verification.canonical);
     assert!(batch.progress.has_next_page);
     assert!(
         batch.rejected[0]
@@ -248,6 +249,7 @@ async fn checkpoint_scan_defaults_to_canonical_filtering() {
                 start_checkpoint: 5,
                 limit: 1,
                 canonical_only: true,
+                trust_policy: paperproof_sdk_rs::IndexerTrustPolicy::Canonical,
             },
         )
         .await
@@ -256,6 +258,31 @@ async fn checkpoint_scan_defaults_to_canonical_filtering() {
     assert_eq!(batch.rejected.len(), 1);
     assert_eq!(batch.progress.scanned_events, 2);
     assert_eq!(batch.accepted[0].id.checkpoint, Some(5));
+}
+
+#[tokio::test]
+async fn checkpoint_scan_rejects_verified_policy_instead_of_silent_downgrade() {
+    let query = PaperProofQueryClient::mainnet();
+    let indexer = PaperProofIndexerClient::new(query);
+    let provider = MockCheckpointProvider {
+        deployment: mainnet_deployment(),
+    };
+    let error = indexer
+        .scan_checkpoint_range_once(
+            &provider,
+            CheckpointScanOptions {
+                start_checkpoint: 5,
+                limit: 1,
+                canonical_only: true,
+                trust_policy: paperproof_sdk_rs::IndexerTrustPolicy::Verified,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        paperproof_sdk_rs::PaperProofError::EventVerification { .. }
+    ));
 }
 
 #[cfg(feature = "async")]

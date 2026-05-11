@@ -3,12 +3,18 @@
 
 use paperproof_sdk_rs::{
     deployment::mainnet_deployment,
+    event_verifier::{PaperProofEventVerifier, VerifyEventOptions},
     events::{
         PaperProofEventKind, SuiEventEnvelope, extract_owner_transferred_result,
         extract_proposal_expired_result, extract_status_changed_result,
         extract_vote_claimed_result, parse_event,
     },
-    events_trust::validate_event_trust,
+    events_trust::{
+        EventTrustLevel, EventVerificationStatus, validate_event_trust,
+        verification_report_from_canonical_check,
+    },
+    read::PaperProofReadClient,
+    JsonRpcClient,
 };
 use serde_json::json;
 
@@ -37,6 +43,44 @@ fn parses_known_event_kind() {
     let parsed = parse_event(&event);
     assert_eq!(parsed.kind, PaperProofEventKind::ArtifactPublished);
     assert!(validate_event_trust(&event, &deployment).trusted);
+}
+
+#[test]
+fn canonical_trust_reports_explain_rejections() {
+    let deployment = mainnet_deployment();
+    let good = event(
+        &deployment.packages.publishing,
+        "publishing",
+        "ArtifactPublishedEvent",
+        json!({
+            "root_id": deployment.objects.root,
+            "series_id": "0xseries",
+            "version_id": "0xversion",
+            "comments_tree_id": "0xtree",
+            "likes_book_id": "0xlikes"
+        }),
+    );
+    let report =
+        verification_report_from_canonical_check(&good, &deployment, EventTrustLevel::Canonical);
+    assert_eq!(report.status, EventVerificationStatus::Canonical);
+    assert!(report.trusted);
+
+    let fake = event(
+        "0xfake",
+        "publishing",
+        "ArtifactPublishedEvent",
+        json!({
+            "root_id": deployment.objects.root,
+            "series_id": "0xseries",
+            "version_id": "0xversion",
+            "comments_tree_id": "0xtree",
+            "likes_book_id": "0xlikes"
+        }),
+    );
+    let report =
+        verification_report_from_canonical_check(&fake, &deployment, EventTrustLevel::Canonical);
+    assert_eq!(report.status, EventVerificationStatus::Rejected);
+    assert_eq!(report.issues[0].code, "PACKAGE_NOT_CONFIGURED");
 }
 
 #[test]
@@ -163,6 +207,38 @@ fn extracts_owner_transfer_event() {
         .unwrap();
     assert_eq!(result.tree_id.as_deref(), Some("0xtree"));
     assert_eq!(result.new_owner, "0xnew");
+}
+
+#[tokio::test]
+async fn verified_unknown_event_type_is_incomplete() {
+    let deployment = mainnet_deployment();
+    let read = PaperProofReadClient::new(JsonRpcClient::new("http://127.0.0.1:9"), deployment.clone());
+    let verifier = PaperProofEventVerifier::new(read);
+    let event = event(
+        &deployment.packages.publishing,
+        "publishing",
+        "FutureEvent",
+        json!({ "root_id": deployment.objects.root }),
+    );
+    let report = verifier
+        .verify_event(
+            &event,
+            VerifyEventOptions {
+                trust: EventTrustLevel::Verified,
+                verify_walrus: false,
+                provider: None,
+            },
+        )
+        .await
+        .expect("verify future event");
+    assert_eq!(report.status, EventVerificationStatus::Incomplete);
+    assert!(!report.trusted);
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|issue| issue.code == "VERIFIED_RULE_NOT_REGISTERED")
+    );
 }
 
 fn event(

@@ -37,6 +37,9 @@ pub enum PaperProofError {
     #[error("event parse error: {message}")]
     EventParse { message: String },
 
+    #[error("event verification failed: {message}")]
+    EventVerification { message: String },
+
     #[error("network error while calling {endpoint}: {message}")]
     Network { endpoint: String, message: String },
 
@@ -73,6 +76,12 @@ impl PaperProofError {
     pub fn network(endpoint: impl Into<String>, message: impl Into<String>) -> Self {
         Self::Network {
             endpoint: endpoint.into(),
+            message: message.into(),
+        }
+    }
+
+    pub fn event_verification(message: impl Into<String>) -> Self {
+        Self::EventVerification {
             message: message.into(),
         }
     }

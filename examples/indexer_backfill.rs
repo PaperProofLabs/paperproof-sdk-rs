@@ -48,6 +48,7 @@ async fn main() -> paperproof_sdk_rs::Result<()> {
                         ..Default::default()
                     },
                     canonical_only: true,
+                    trust_policy: paperproof_sdk_rs::IndexerTrustPolicy::Canonical,
                 })
                 .await?;
             cursor = batch.progress.cursor.clone();

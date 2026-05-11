@@ -6,11 +6,19 @@ use serde_json::{Value, json};
 use crate::{
     error::Result,
     events::SuiEventEnvelope,
+    events_trust::EventTrustLevel,
     query::{
-        EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient, dedupe_events,
-        event_dedupe_key,
+        EventPage, EventQueryInput, PaginationInput, PaperProofQueryClient, TrustedEventPage,
+        TrustedEventQueryInput, dedupe_events, event_dedupe_key,
     },
 };
+
+#[derive(Clone, Debug)]
+struct TrustedWatchConfig {
+    trust: EventTrustLevel,
+    include_rejected: bool,
+    verify_walrus: bool,
+}
 
 #[derive(Clone, Debug)]
 pub struct WatchOptions {
@@ -40,6 +48,19 @@ pub struct PaperProofEventWatcher {
     query: PaperProofQueryClient,
     fetch: WatchFetch,
     pub options: WatchOptions,
+    pub cursor: Option<Value>,
+    pub stopped: bool,
+    seen: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PaperProofTrustedEventWatcher {
+    query: PaperProofQueryClient,
+    pub options: WatchOptions,
+    pub filter: EventQueryInput,
+    pub trust: EventTrustLevel,
+    pub include_rejected: bool,
+    pub verify_walrus: bool,
     pub cursor: Option<Value>,
     pub stopped: bool,
     seen: Vec<String>,
@@ -158,6 +179,81 @@ impl PaperProofEventWatcher {
     }
 }
 
+impl PaperProofTrustedEventWatcher {
+    pub fn stop(&mut self) {
+        self.stopped = true;
+    }
+
+    pub async fn next(&mut self) -> Result<TrustedEventPage> {
+        if self.stopped {
+            return Ok(TrustedEventPage {
+                data: Vec::new(),
+                next_cursor: self.cursor.clone(),
+                has_next_page: false,
+                raw: Value::Null,
+                trust: self.trust.clone(),
+                verification: Vec::new(),
+                rejected: Vec::new(),
+                incomplete: Vec::new(),
+            });
+        }
+        let mut pages = Vec::new();
+        let mut next_cursor = self.cursor.clone();
+        for _ in 0..self.options.max_pages_per_tick.max(1) {
+            let input = EventQueryInput {
+                sender: self.filter.sender.clone(),
+                package_id: self.filter.package_id.clone(),
+                module: self.filter.module.clone(),
+                event_type: self.filter.event_type.clone(),
+                move_event_type: self.filter.move_event_type.clone(),
+                start_time_ms: self.filter.start_time_ms,
+                end_time_ms: self.filter.end_time_ms,
+                pagination: PaginationInput {
+                    cursor: next_cursor.clone(),
+                    limit: self.options.limit,
+                    descending_order: Some(self.options.descending_order),
+                },
+            };
+            let mut page = self
+                .query
+                .query_trusted_events(TrustedEventQueryInput {
+                    query: input,
+                    trust: self.trust.clone(),
+                    include_rejected: self.include_rejected,
+                    verify_walrus: self.verify_walrus,
+                })
+                .await?;
+            if self.options.dedupe {
+                let fresh = page
+                    .data
+                    .into_iter()
+                    .filter(|event| {
+                        let key = event_dedupe_key(&event.event);
+                        if self.seen.contains(&key) {
+                            false
+                        } else {
+                            self.seen.push(key);
+                            true
+                        }
+                    })
+                    .collect();
+                page.data = fresh;
+                while self.seen.len() > self.options.max_seen_events.max(1) {
+                    self.seen.remove(0);
+                }
+            }
+            next_cursor = page.next_cursor.clone();
+            let done = !page.has_next_page || next_cursor.is_none();
+            pages.push(page);
+            if done {
+                break;
+            }
+        }
+        self.cursor = next_cursor.clone();
+        Ok(combine_trusted_pages(pages, self.trust.clone()))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct PaperProofWatchClient {
     pub query: PaperProofQueryClient,
@@ -178,6 +274,48 @@ impl PaperProofWatchClient {
 
     pub fn watch_canonical_events(&self, options: WatchOptions) -> PaperProofEventWatcher {
         self.watcher(WatchFetch::CanonicalEvents, options)
+    }
+
+    pub fn watch_trusted_events(
+        &self,
+        trust: EventTrustLevel,
+        options: WatchOptions,
+    ) -> PaperProofTrustedEventWatcher {
+        PaperProofTrustedEventWatcher {
+            query: self.query.clone(),
+            cursor: options.cursor.clone(),
+            options,
+            filter: EventQueryInput::default(),
+            trust,
+            include_rejected: false,
+            verify_walrus: false,
+            stopped: false,
+            seen: Vec::new(),
+        }
+    }
+
+    pub fn watch_verified_events(&self, options: WatchOptions) -> PaperProofTrustedEventWatcher {
+        self.watch_trusted_events(EventTrustLevel::Verified, options)
+    }
+
+    pub fn watch_trusted_events_with_verification_options(
+        &self,
+        trust: EventTrustLevel,
+        options: WatchOptions,
+        include_rejected: bool,
+        verify_walrus: bool,
+    ) -> PaperProofTrustedEventWatcher {
+        PaperProofTrustedEventWatcher {
+            query: self.query.clone(),
+            cursor: options.cursor.clone(),
+            options,
+            filter: EventQueryInput::default(),
+            trust,
+            include_rejected,
+            verify_walrus,
+            stopped: false,
+            seen: Vec::new(),
+        }
     }
 
     pub fn watch_publishing_events(
@@ -212,6 +350,67 @@ impl PaperProofWatchClient {
         options: WatchOptions,
     ) -> PaperProofEventWatcher {
         self.watcher(WatchFetch::Governance(struct_name.to_string()), options)
+    }
+
+    pub fn watch_verified_publishing_events(
+        &self,
+        struct_name: &str,
+        options: WatchOptions,
+        include_rejected: bool,
+        verify_walrus: bool,
+    ) -> PaperProofTrustedEventWatcher {
+        self.watch_trusted_move_event_type(
+            TrustedWatchConfig {
+                trust: EventTrustLevel::Verified,
+                include_rejected,
+                verify_walrus,
+            },
+            "publishing",
+            struct_name,
+            &self.query.deployment.packages.publishing,
+            options,
+        )
+    }
+
+    pub fn watch_verified_comments_events(
+        &self,
+        struct_name: &str,
+        options: WatchOptions,
+        include_rejected: bool,
+        verify_walrus: bool,
+    ) -> PaperProofTrustedEventWatcher {
+        self.watch_trusted_move_event_type(
+            TrustedWatchConfig {
+                trust: EventTrustLevel::Verified,
+                include_rejected,
+                verify_walrus,
+            },
+            "comments",
+            struct_name,
+            &self.query.deployment.packages.comments,
+            options,
+        )
+    }
+
+    pub fn watch_verified_governance_events(
+        &self,
+        struct_name: &str,
+        options: WatchOptions,
+        include_rejected: bool,
+        verify_walrus: bool,
+    ) -> PaperProofTrustedEventWatcher {
+        let mut watcher = self.watch_trusted_events_with_verification_options(
+            EventTrustLevel::Verified,
+            options,
+            include_rejected,
+            verify_walrus,
+        );
+        watcher.filter.move_event_type = Some(move_event_type(
+            &self.query.deployment.packages.governance,
+            "governance_voting",
+            struct_name,
+        ));
+        watcher
     }
 
     pub fn watch_artifact_published_events(&self, options: WatchOptions) -> PaperProofEventWatcher {
@@ -377,6 +576,24 @@ impl PaperProofWatchClient {
         )
     }
 
+    fn watch_trusted_move_event_type(
+        &self,
+        config: TrustedWatchConfig,
+        module: &str,
+        struct_name: &str,
+        package_id: &str,
+        options: WatchOptions,
+    ) -> PaperProofTrustedEventWatcher {
+        let mut watcher = self.watch_trusted_events_with_verification_options(
+            config.trust,
+            options,
+            config.include_rejected,
+            config.verify_walrus,
+        );
+        watcher.filter.move_event_type = Some(move_event_type(package_id, module, struct_name));
+        watcher
+    }
+
     fn watcher(&self, fetch: WatchFetch, options: WatchOptions) -> PaperProofEventWatcher {
         let cursor = options.cursor.clone();
         PaperProofEventWatcher {
@@ -400,5 +617,30 @@ fn combine_pages(pages: Vec<EventPage<SuiEventEnvelope>>) -> EventPage<SuiEventE
         next_cursor: None,
         has_next_page: pages.iter().any(|page| page.has_next_page),
         raw: json!({ "pages": pages.into_iter().map(|page| page.raw).collect::<Vec<_>>() }),
+    }
+}
+
+fn combine_trusted_pages(pages: Vec<TrustedEventPage>, trust: EventTrustLevel) -> TrustedEventPage {
+    let next_cursor = pages.last().and_then(|page| page.next_cursor.clone());
+    let has_next_page = pages.iter().any(|page| page.has_next_page);
+    let raw = json!({ "pages": pages.iter().map(|page| page.raw.clone()).collect::<Vec<_>>() });
+    TrustedEventPage {
+        data: pages.iter().flat_map(|page| page.data.clone()).collect(),
+        next_cursor,
+        has_next_page,
+        raw,
+        trust,
+        verification: pages
+            .iter()
+            .flat_map(|page| page.verification.clone())
+            .collect(),
+        rejected: pages
+            .iter()
+            .flat_map(|page| page.rejected.clone())
+            .collect(),
+        incomplete: pages
+            .iter()
+            .flat_map(|page| page.incomplete.clone())
+            .collect(),
     }
 }
