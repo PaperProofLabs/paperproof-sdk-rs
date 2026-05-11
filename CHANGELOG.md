@@ -2,6 +2,25 @@
 
 All notable changes to the PaperProof Rust SDK are documented here.
 
+## 0.2.3 - 2026-05-12
+
+### Added
+
+- Added verified event querying infrastructure with explicit verification reports, trusted event envelopes, and fail-closed page guards.
+- Added `assert_no_incomplete` and `require_verified_page` helpers so indexers and applications can reject incomplete or downgraded verified pages with one call.
+- Added a mainnet verified-events example that exercises trusted querying and guard behavior against real PaperProof events.
+
+### Changed
+
+- Hardened query and watch APIs so `Verified` trust keeps rejected and incomplete verification reports visible instead of silently treating failures as empty history.
+- Strengthened indexer trust policy handling, including explicit rejection of checkpoint-based verified ingestion when object-binding reads are unavailable.
+- Updated README/API documentation to describe canonical versus verified trust levels and when verified data is required for statistics, governance history, rewards, and airdrop snapshots.
+
+### Fixed
+
+- Broadened Sui object/id byte parsing so provider responses that encode bytes as numeric-key JSON objects are handled consistently.
+- Improved proposal/object verification compatibility across provider response shapes used by GraphQL and gRPC-style adapters.
+
 ## 0.2.2 - 2026-05-11
 
 First crates.io-ready release candidate for the PaperProof Rust SDK.

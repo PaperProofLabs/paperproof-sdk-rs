@@ -1261,7 +1261,8 @@ impl PaperProofIndexerClient {
             let retry = retry.clone();
             let stream = stream.clone();
             reject_verified_checkpoint_policy(&options.trust_policy)?;
-            let trust_policy = checkpoint_policy(options.canonical_only, options.trust_policy.clone());
+            let trust_policy =
+                checkpoint_policy(options.canonical_only, options.trust_policy.clone());
             handles.push(tokio::spawn(async move {
                 loop {
                     let start = next_job_checkpoint.fetch_add(batch_size, Ordering::SeqCst);

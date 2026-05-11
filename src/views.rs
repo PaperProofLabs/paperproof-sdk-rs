@@ -72,6 +72,11 @@ pub fn id_value(value: &Value) -> Option<String> {
             return Some(format!("0x{}", hex));
         }
     }
+    if let Some(bytes) = numeric_key_bytes(value)
+        && !bytes.is_empty()
+    {
+        return Some(format!("0x{}", hex::encode(bytes)));
+    }
     value
         .get("id")
         .and_then(Value::as_str)
@@ -113,7 +118,23 @@ pub fn bytes_value(value: &Value) -> Vec<u8> {
             .filter_map(|item| item.as_u64().map(|number| number as u8))
             .collect();
     }
+    if let Some(bytes) = numeric_key_bytes(value) {
+        return bytes;
+    }
     Vec::new()
+}
+
+fn numeric_key_bytes(value: &Value) -> Option<Vec<u8>> {
+    let object = value.as_object()?;
+    let mut entries = object
+        .iter()
+        .filter_map(|(key, byte)| Some((key.parse::<usize>().ok()?, byte.as_u64()? as u8)))
+        .collect::<Vec<_>>();
+    if entries.is_empty() {
+        return None;
+    }
+    entries.sort_by_key(|(index, _)| *index);
+    Some(entries.into_iter().map(|(_, byte)| byte).collect())
 }
 
 pub fn parse_option_field(value: &Value) -> Option<&Value> {

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use paperproof_sdk_rs::{
-    EventQueryInput, EventTrustLevel, PaginationInput, PaperProofQueryClient, TrustedEventQueryInput,
-    assert_no_incomplete,
+    EventQueryInput, EventTrustLevel, PaginationInput, PaperProofQueryClient,
+    TrustedEventQueryInput, assert_no_incomplete,
 };
 
 #[tokio::main]

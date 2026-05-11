@@ -3,7 +3,10 @@
 
 use paperproof_sdk_rs::{
     types::DecodedObject,
-    views::{parse_metadata_attributes, view_comment_node, view_series, view_version},
+    views::{
+        bytes_value, id_value, parse_metadata_attributes, view_comment_node, view_series,
+        view_version,
+    },
 };
 use serde_json::json;
 
@@ -102,4 +105,24 @@ fn metadata_parser_accepts_plain_vectors() {
     ]));
     assert_eq!(metadata.len(), 2);
     assert_eq!(metadata[1].key, "c");
+}
+
+#[test]
+fn id_value_accepts_numeric_key_byte_objects() {
+    let value = json!({
+        "2": 204,
+        "0": 170,
+        "1": 187
+    });
+    assert_eq!(id_value(&value).as_deref(), Some("0xaabbcc"));
+}
+
+#[test]
+fn bytes_value_accepts_numeric_key_byte_objects() {
+    let value = json!({
+        "1": 2,
+        "0": 1,
+        "2": 3
+    });
+    assert_eq!(bytes_value(&value), vec![1, 2, 3]);
 }

@@ -67,8 +67,8 @@ pub use events::{
 pub use events_trust::{
     EventIssueSeverity, EventTrustLevel, EventTrustResult, EventVerificationIssue,
     EventVerificationReport, EventVerificationStatus, TrustedSuiEventEnvelope,
-    VerifiedEventPageGuard, assert_no_incomplete, attach_event_verification,
-    require_verified_page, verification_report_from_canonical_check,
+    VerifiedEventPageGuard, assert_no_incomplete, attach_event_verification, require_verified_page,
+    verification_report_from_canonical_check,
 };
 pub use executor::{CliExecutionOptions, CliExecutionOutput, ExecutionMode, SuiCliExecutor};
 #[cfg(feature = "async")]
@@ -76,11 +76,11 @@ pub use indexer::CheckpointIngestionOptions;
 pub use indexer::{
     CheckpointCursor, CheckpointData, CheckpointDataProvider, CheckpointIngestionReport,
     CheckpointScanOptions, EventId, IndexedPaperProofEvent, IndexerCursorStore, IndexerEventBatch,
-    IndexerMetrics, IndexerProgress, IndexerScanOptions, IndexerTrustPolicy, MemoryIndexerCursorStore,
-    PackageModuleFilter, PaperProofDomainChange, PaperProofIndexerClient, PaperProofIndexerState,
-    RejectedPaperProofEvent, StoredIndexerCursor, StreamId, domain_change_from_event, event_id,
-    event_kind_counts, indexer_batch_from_page, indexer_batch_from_page_with_policy,
-    indexer_batch_from_trusted_page,
+    IndexerMetrics, IndexerProgress, IndexerScanOptions, IndexerTrustPolicy,
+    MemoryIndexerCursorStore, PackageModuleFilter, PaperProofDomainChange, PaperProofIndexerClient,
+    PaperProofIndexerState, RejectedPaperProofEvent, StoredIndexerCursor, StreamId,
+    domain_change_from_event, event_id, event_kind_counts, indexer_batch_from_page,
+    indexer_batch_from_page_with_policy, indexer_batch_from_trusted_page,
 };
 pub use providers::{
     BuiltTransaction, DynamicFieldName, DynamicFieldObject, PaperProofDataProvider,

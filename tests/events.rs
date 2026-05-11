@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use paperproof_sdk_rs::{
+    JsonRpcClient,
     deployment::mainnet_deployment,
     event_verifier::{PaperProofEventVerifier, VerifyEventOptions},
     events::{
@@ -14,7 +15,6 @@ use paperproof_sdk_rs::{
         verification_report_from_canonical_check,
     },
     read::PaperProofReadClient,
-    JsonRpcClient,
 };
 use serde_json::json;
 
@@ -212,7 +212,8 @@ fn extracts_owner_transfer_event() {
 #[tokio::test]
 async fn verified_unknown_event_type_is_incomplete() {
     let deployment = mainnet_deployment();
-    let read = PaperProofReadClient::new(JsonRpcClient::new("http://127.0.0.1:9"), deployment.clone());
+    let read =
+        PaperProofReadClient::new(JsonRpcClient::new("http://127.0.0.1:9"), deployment.clone());
     let verifier = PaperProofEventVerifier::new(read);
     let event = event(
         &deployment.packages.publishing,
