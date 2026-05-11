@@ -2,6 +2,24 @@
 
 All notable changes to the PaperProof Rust SDK are documented here.
 
+## 0.2.2 - 2026-05-11
+
+First crates.io-ready release candidate for the PaperProof Rust SDK.
+
+### Added
+
+- gRPC-oriented Sui provider support and CLI fallback execution paths.
+- High-level service APIs, typed result helpers, query provider helpers and watch APIs.
+- Walrus ContentService helpers for native write, extend, transfer, read and verify flows.
+- Indexer-focused checkpoint ingestion, persistent cursors, idempotent event IDs and canonical filters.
+- SQLite/Postgres cursor stores and event sinks with batch upsert support.
+- Backfill/tail CLI examples, tracing metrics, benchmark scaffolding and deployment examples.
+
+### Notes
+
+- Mainnet write examples remain explicit opt-in.
+- SDK configuration supports deployment manifests instead of hardcoding one network.
+
 ## 0.1.0 - 2026-05-09
 
 Initial Rust SDK release for the PaperProof protocol.
