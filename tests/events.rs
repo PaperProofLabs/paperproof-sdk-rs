@@ -7,8 +7,8 @@ use paperproof_sdk_rs::{
     event_verifier::{PaperProofEventVerifier, VerifyEventOptions},
     events::{
         PaperProofEventKind, SuiEventEnvelope, extract_owner_transferred_result,
-        extract_proposal_expired_result, extract_status_changed_result,
-        extract_vote_claimed_result, parse_event,
+        extract_preprint_reservation_result, extract_proposal_expired_result,
+        extract_status_changed_result, extract_vote_claimed_result, parse_event,
     },
     events_trust::{
         EventTrustLevel, EventVerificationStatus, validate_event_trust,
@@ -43,6 +43,34 @@ fn parses_known_event_kind() {
     let parsed = parse_event(&event);
     assert_eq!(parsed.kind, PaperProofEventKind::ArtifactPublished);
     assert!(validate_event_trust(&event, &deployment).trusted);
+}
+
+#[test]
+fn parses_and_extracts_preprint_reservation_event() {
+    let deployment = mainnet_deployment();
+    let events = vec![event(
+        &deployment.packages.publishing,
+        "publishing",
+        "PreprintCodeReservedEvent",
+        json!({
+            "reservation_id": "0xreservation",
+            "series_id": "0xseries",
+            "reserver": "0xabc",
+            "artifact_code": "PaperProof-preprint-001125-bb1cdfa02c0e",
+            "created_at_ms": "1778385404"
+        }),
+    )];
+    let parsed = parse_event(&events[0]);
+    assert_eq!(parsed.kind, PaperProofEventKind::PreprintCodeReserved);
+    let result = extract_preprint_reservation_result(&events, Some(&deployment)).unwrap();
+    assert_eq!(result.reservation_id, "0xreservation");
+    assert_eq!(result.series_id, "0xseries");
+    assert_eq!(result.reserver, "0xabc");
+    assert_eq!(
+        result.artifact_code,
+        "PaperProof-preprint-001125-bb1cdfa02c0e"
+    );
+    assert_eq!(result.created_at_ms, 1778385404);
 }
 
 #[test]

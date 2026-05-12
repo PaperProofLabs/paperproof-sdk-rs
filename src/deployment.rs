@@ -42,10 +42,10 @@ pub struct CoinTypes {
 
 pub fn mainnet_deployment() -> Deployment {
     Deployment {
-        name: "paperproof-mainnet-2026-05-08".to_string(),
+        name: "paperproof-mainnet-2026-05-13".to_string(),
         network: "mainnet".to_string(),
         rpc_url: "https://fullnode.mainnet.sui.io:443".to_string(),
-        protocol_version: "publishing-v2-governance-v2-comments-v2".to_string(),
+        protocol_version: "publishing-v3-governance-v2-comments-v2".to_string(),
         packages: DeploymentPackages {
             pprf: "0x5d2ec9829a9e116de7c2008281a90b96690beb2252af120ad05a25fe13fae0da".to_string(),
             governance_original:
@@ -54,7 +54,7 @@ pub fn mainnet_deployment() -> Deployment {
                 .to_string(),
             comments: "0xaef346fc40bf20af62f4bbbc1608ba2272e80e4ba3d716634026baa589e9aeba"
                 .to_string(),
-            publishing: "0xe67a6956f37c3182354189d9b77ca14058694aad82522da0c6cb91cfddee4782"
+            publishing: "0xc9a75e4514db2a37df6f95b4e2b329c065ac6089953bd2c1c0a0c389835bd3d8"
                 .to_string(),
         },
         objects: DeploymentObjects {

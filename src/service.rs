@@ -6,8 +6,8 @@ use crate::{
     deployment::Deployment,
     error::Result,
     events::{
-        AddVersionResult, CommentResult, LikeResult, ProposalExecutedResult,
-        ProposalFinalizedResult, ProposalResult, PublishResult,
+        AddVersionResult, CommentResult, LikeResult, PreprintReservationResult,
+        ProposalExecutedResult, ProposalFinalizedResult, ProposalResult, PublishResult,
     },
     executor::{CliExecutionOptions, CliExecutionOutput, SuiCliExecutor},
     providers::{PaperProofExecutionProvider, ProviderExecutionOptions, ProviderExecutionOutput},
@@ -89,6 +89,34 @@ impl PaperProofService {
         self.execute_publish(
             self.client.publishing.publish_preprint(input)?,
             "publish preprint",
+            options,
+        )
+    }
+
+    pub fn reserve_preprint_code(
+        &self,
+        owner: &str,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<PreprintReservationResult>> {
+        let execution = self.execute_plan(
+            &self.client.publishing.reserve_preprint_code(owner)?,
+            options,
+        )?;
+        let result = execution.preprint_reservation_result(&self.client.deployment)?;
+        Ok(ExecutedResult { execution, result })
+    }
+
+    pub fn finalize_reserved_preprint(
+        &self,
+        reservation_id: &str,
+        input: &PreprintInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<PublishResult>> {
+        self.execute_publish(
+            self.client
+                .publishing
+                .finalize_reserved_preprint(reservation_id, input)?,
+            "finalize reserved preprint",
             options,
         )
     }
@@ -500,6 +528,37 @@ where
     ) -> Result<ProviderExecutedResult<PublishResult>> {
         self.execute_publish(self.client.publishing.publish_preprint(input)?, options)
             .await
+    }
+
+    pub async fn reserve_preprint_code(
+        &self,
+        owner: &str,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<PreprintReservationResult>> {
+        let execution = self
+            .execute_plan(
+                &self.client.publishing.reserve_preprint_code(owner)?,
+                options,
+            )
+            .await?;
+        let cli = execution.clone().into_cli_output()?;
+        let result = cli.preprint_reservation_result(&self.client.deployment)?;
+        Ok(ProviderExecutedResult { execution, result })
+    }
+
+    pub async fn finalize_reserved_preprint(
+        &self,
+        reservation_id: &str,
+        input: &PreprintInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<PublishResult>> {
+        self.execute_publish(
+            self.client
+                .publishing
+                .finalize_reserved_preprint(reservation_id, input)?,
+            options,
+        )
+        .await
     }
 
     pub async fn add_onchain_comment(

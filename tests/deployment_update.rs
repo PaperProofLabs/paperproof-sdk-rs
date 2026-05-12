@@ -10,6 +10,7 @@ use paperproof_sdk_rs::{
     },
 };
 use serde_json::json;
+use std::{fs, path::PathBuf};
 
 #[test]
 fn detects_deployment_drift() {
@@ -77,6 +78,23 @@ fn parses_contracts_repository_manifest_shape() {
         Some("2026-05-08T00:00:00+08:00")
     );
     assert_eq!(manifest.min_sdk_version.as_deref(), Some("0.1.0"));
+}
+
+#[test]
+fn mainnet_deployment_matches_contracts_repository_manifest() {
+    let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("sdk repo has a parent workspace directory")
+        .join("paperproof-contracts")
+        .join("docs")
+        .join("deployments")
+        .join("mainnet.json");
+    let value: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(manifest_path).expect("contracts manifest is readable"),
+    )
+    .expect("contracts manifest is json");
+    let manifest = manifest_from_value(value).expect("contracts manifest should parse");
+    assert_eq!(manifest.deployment, mainnet_deployment());
 }
 
 #[test]

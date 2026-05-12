@@ -47,7 +47,9 @@ fn main() -> paperproof_sdk_rs::Result<()> {
                 value: "extra".to_string(),
             });
         }
-        client.publishing.publish_preprint(&preprint)?;
+        client
+            .publishing
+            .finalize_reserved_preprint("0x1234", &preprint)?;
         built += 1;
 
         client.publishing.add_preprint_version(&AddVersionInput {

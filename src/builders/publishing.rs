@@ -4,8 +4,10 @@
 use crate::{
     builders::base::BaseBuilder,
     deployment::Deployment,
-    error::Result,
-    transaction::{MoveArgument as Arg, MoveCall, TransactionPlan},
+    error::{PaperProofError, Result},
+    transaction::{
+        MoveArgument as Arg, MoveCall, TransactionPlan, TransactionValueRef, TransferObjects,
+    },
     types::{
         AddVersionInput, BlogPostInput, DatasetInput, GenericFileInput, MetadataAttribute,
         PreprintInput, SoftwareReleaseInput, TechnicalReportInput, TransferArtifactOwnerInput,
@@ -31,21 +33,56 @@ impl PublishingBuilder {
 
     pub fn publish_preprint(&self, input: &PreprintInput) -> Result<TransactionPlan> {
         validate_preprint_input(input)?;
-        Ok(self.publish_call(
+        Err(PaperProofError::invalid_input(
             "publish_preprint",
-            vec![
-                Arg::String(input.title.clone()),
-                Arg::String(input.abstract_text.clone()),
-                Arg::StringVector(input.authors.clone()),
-                Arg::StringVector(input.keywords.clone()),
-                Arg::String(input.field.clone()),
-                Arg::String(input.license.clone()),
-                Arg::U64(input.page_count),
+            "direct preprint publishing is disabled by the upgraded contract; reserve a preprint code, stamp the PDF, then call finalize_reserved_preprint",
+        ))
+    }
+
+    pub fn reserve_preprint_code(&self, owner: &str) -> Result<TransactionPlan> {
+        crate::validation::validate_address(owner)?;
+        let mut plan = TransactionPlan::single(MoveCall {
+            target: self.base.publishing_target("reserve_preprint_code"),
+            arguments: vec![
+                Arg::Object(self.base.deployment.objects.root.clone()),
+                Arg::Object(self.base.deployment.objects.type_registry.clone()),
+                Arg::Object(self.base.deployment.objects.governance_vault.clone()),
+                Arg::Object(self.base.deployment.objects.fee_manager.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
             ],
-            &input.content,
-            &input.series_metadata,
-            &input.version_metadata,
-            input.payment_coin_id.as_ref(),
+        });
+        plan.transfers.push(TransferObjects {
+            objects: vec![TransactionValueRef::LastResult],
+            recipient: owner.to_string(),
+        });
+        Ok(plan)
+    }
+
+    pub fn finalize_reserved_preprint(
+        &self,
+        reservation_id: &str,
+        input: &PreprintInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(reservation_id)?;
+        validate_preprint_input(input)?;
+        Ok(self.publish_call_with_context(
+            "finalize_reserved_preprint",
+            PublishCallContext {
+                prefix: vec![Arg::Object(reservation_id.to_string())],
+                args: vec![
+                    Arg::String(input.title.clone()),
+                    Arg::String(input.abstract_text.clone()),
+                    Arg::StringVector(input.authors.clone()),
+                    Arg::StringVector(input.keywords.clone()),
+                    Arg::String(input.field.clone()),
+                    Arg::String(input.license.clone()),
+                    Arg::U64(input.page_count),
+                ],
+                content: &input.content,
+                series_metadata: &input.series_metadata,
+                version_metadata: &input.version_metadata,
+                payment_coin_id: input.payment_coin_id.as_ref(),
+            },
         ))
     }
 
@@ -56,9 +93,8 @@ impl PublishingBuilder {
             vec![
                 Arg::String(input.title.clone()),
                 Arg::String(input.summary.clone()),
-                Arg::String(input.author_name.clone()),
                 Arg::StringVector(input.tags.clone()),
-                Arg::String(input.license.clone()),
+                Arg::String(input.language.clone()),
             ],
             &input.content,
             &input.series_metadata,
@@ -80,9 +116,8 @@ impl PublishingBuilder {
                 Arg::StringVector(input.authors.clone()),
                 Arg::String(input.organization.clone()),
                 Arg::String(input.report_number.clone()),
-                Arg::String(input.field.clone()),
+                Arg::StringVector(input.keywords.clone()),
                 Arg::String(input.license.clone()),
-                Arg::U64(input.page_count),
             ],
             &input.content,
             &input.series_metadata,
@@ -98,11 +133,11 @@ impl PublishingBuilder {
             vec![
                 Arg::String(input.title.clone()),
                 Arg::String(input.description.clone()),
-                Arg::StringVector(input.authors.clone()),
-                Arg::String(input.field.clone()),
+                Arg::String(input.format.clone()),
+                Arg::U64(input.file_count),
+                Arg::U64(input.size_bytes),
                 Arg::String(input.license.clone()),
-                Arg::String(input.schema_hash.clone()),
-                Arg::U64(input.record_count),
+                Arg::StringVector(input.keywords.clone()),
             ],
             &input.content,
             &input.series_metadata,
@@ -212,9 +247,8 @@ impl PublishingBuilder {
             vec![
                 Arg::String(input.body.title.clone()),
                 Arg::String(input.body.summary.clone()),
-                Arg::String(input.body.author_name.clone()),
                 Arg::StringVector(input.body.tags.clone()),
-                Arg::String(input.body.license.clone()),
+                Arg::String(input.body.language.clone()),
             ],
             &input.body.content,
             &input.body.version_metadata,
@@ -237,9 +271,8 @@ impl PublishingBuilder {
                 Arg::StringVector(input.body.authors.clone()),
                 Arg::String(input.body.organization.clone()),
                 Arg::String(input.body.report_number.clone()),
-                Arg::String(input.body.field.clone()),
+                Arg::StringVector(input.body.keywords.clone()),
                 Arg::String(input.body.license.clone()),
-                Arg::U64(input.body.page_count),
             ],
             &input.body.content,
             &input.body.version_metadata,
@@ -259,11 +292,11 @@ impl PublishingBuilder {
             vec![
                 Arg::String(input.body.title.clone()),
                 Arg::String(input.body.description.clone()),
-                Arg::StringVector(input.body.authors.clone()),
-                Arg::String(input.body.field.clone()),
+                Arg::String(input.body.format.clone()),
+                Arg::U64(input.body.file_count),
+                Arg::U64(input.body.size_bytes),
                 Arg::String(input.body.license.clone()),
-                Arg::String(input.body.schema_hash.clone()),
-                Arg::U64(input.body.record_count),
+                Arg::StringVector(input.body.keywords.clone()),
             ],
             &input.body.content,
             &input.body.version_metadata,
@@ -333,11 +366,29 @@ impl PublishingBuilder {
     fn publish_call(
         &self,
         function: &str,
-        mut args: Vec<Arg>,
+        args: Vec<Arg>,
         content: &crate::types::CommonContentInput,
         series_metadata: &[MetadataAttribute],
         version_metadata: &[MetadataAttribute],
         payment_coin_id: Option<&String>,
+    ) -> TransactionPlan {
+        self.publish_call_with_context(
+            function,
+            PublishCallContext {
+                prefix: Vec::new(),
+                args,
+                content,
+                series_metadata,
+                version_metadata,
+                payment_coin_id,
+            },
+        )
+    }
+
+    fn publish_call_with_context(
+        &self,
+        function: &str,
+        mut context: PublishCallContext<'_>,
     ) -> TransactionPlan {
         let mut arguments = vec![
             Arg::Object(self.base.deployment.objects.root.clone()),
@@ -345,12 +396,16 @@ impl PublishingBuilder {
             Arg::Object(self.base.deployment.objects.governance_vault.clone()),
             Arg::Object(self.base.deployment.objects.fee_manager.clone()),
         ];
-        arguments.append(&mut args);
-        append_content_args(&mut arguments, content);
+        if !context.prefix.is_empty() {
+            context.prefix.append(&mut arguments);
+            arguments = context.prefix;
+        }
+        arguments.append(&mut context.args);
+        append_content_args(&mut arguments, context.content);
         arguments.extend([
-            Arg::MetadataVector(series_metadata.to_vec()),
-            Arg::MetadataVector(version_metadata.to_vec()),
-            self.base.sui_payment(payment_coin_id),
+            Arg::MetadataVector(context.series_metadata.to_vec()),
+            Arg::MetadataVector(context.version_metadata.to_vec()),
+            self.base.sui_payment(context.payment_coin_id),
             Arg::Object(self.base.deployment.objects.clock.clone()),
         ]);
         TransactionPlan::single(MoveCall {
@@ -387,6 +442,15 @@ impl PublishingBuilder {
             arguments,
         })
     }
+}
+
+struct PublishCallContext<'a> {
+    prefix: Vec<Arg>,
+    args: Vec<Arg>,
+    content: &'a crate::types::CommonContentInput,
+    series_metadata: &'a [MetadataAttribute],
+    version_metadata: &'a [MetadataAttribute],
+    payment_coin_id: Option<&'a String>,
 }
 
 fn append_content_args(args: &mut Vec<Arg>, content: &crate::types::CommonContentInput) {

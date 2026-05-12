@@ -61,8 +61,8 @@ pub use deployment_verifier::{
 pub use error::{PaperProofError, Result};
 pub use event_verifier::{PaperProofEventVerifier, VerifyEventOptions};
 pub use events::{
-    AddVersionResult, CommentResult, LikeResult, ProposalExecutedResult, ProposalFinalizedResult,
-    ProposalResult, PublishResult, VoteCastResult,
+    AddVersionResult, CommentResult, LikeResult, PreprintReservationResult, ProposalExecutedResult,
+    ProposalFinalizedResult, ProposalResult, PublishResult, VoteCastResult,
 };
 pub use events_trust::{
     EventIssueSeverity, EventTrustLevel, EventTrustResult, EventVerificationIssue,
@@ -120,12 +120,14 @@ pub use sui_native::{
     NoopNativeSigner, SuiNativeProvider, UnsupportedNativeBuilder, execute_native_transaction,
     simulate_native_transaction,
 };
-pub use transaction::{MoveArgument, MoveCall, TransactionPlan};
+pub use transaction::{
+    MoveArgument, MoveCall, TransactionPlan, TransactionValueRef, TransferObjects,
+};
 pub use types::*;
 pub use walrus::{
     ContentPublishOptions, ContentPublishResult, ContentReadResult, PaperProofContentBackend,
-    PaperProofContentService, WalrusExtendOptions, WalrusExtendResult, WalrusTransferOptions,
-    WalrusTransferResult, WalrusWriteOptions,
+    PaperProofContentService, WalrusCliClient, WalrusClient, WalrusExtendOptions,
+    WalrusExtendResult, WalrusTransferOptions, WalrusTransferResult, WalrusWriteOptions,
 };
 pub use watch::{
     PaperProofEventWatcher, PaperProofTrustedEventWatcher, PaperProofWatchClient, WatchOptions,

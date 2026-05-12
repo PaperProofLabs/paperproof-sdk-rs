@@ -64,7 +64,8 @@ use paperproof_sdk_rs::{PaperProofClient, types::{CommonContentInput, PreprintIn
 
 fn main() -> paperproof_sdk_rs::Result<()> {
     let client = PaperProofClient::mainnet();
-    let plan = client.publishing.publish_preprint(&PreprintInput {
+    let reservation_id = "0x1234";
+    let plan = client.publishing.finalize_reserved_preprint(reservation_id, &PreprintInput {
         title: "Example preprint".into(),
         abstract_text: "A minimal PaperProof Rust SDK example.".into(),
         authors: vec!["PaperProof Labs".into()],
@@ -522,9 +523,11 @@ rebuild a fresh transaction plan before retrying.
 ## Walrus
 
 There is no official Rust Walrus SDK at the time this crate was created. The
-crate uses the public HTTP aggregator/publisher shape directly and does not
-depend on third-party Walrus crates. The helper always exposes digest checks so
-callers can verify content before binding it to PaperProof metadata.
+crate supports HTTP aggregator/publisher endpoints and a local `walrus` CLI
+backend. Mainnet writes require a funded/authenticated publisher or a local
+Walrus CLI configured with your wallet; do not assume a free unauthenticated
+mainnet publisher exists. The helper always exposes digest checks so callers can
+verify content before binding it to PaperProof metadata.
 
 For application code, prefer `PaperProofContentService`. It gives PaperProof
 users a single content lifecycle API: publish bytes, read and verify bytes,
@@ -539,12 +542,21 @@ use paperproof_sdk_rs::{
 
 let walrus = WalrusClient::new(
     "https://aggregator.walrus-mainnet.walrus.space",
-    Some("https://publisher.walrus-mainnet.walrus.space".to_string()),
+    Some(std::env::var("PAPERPROOF_WALRUS_PUBLISHER_URL")?),
 );
 let content = PaperProofContentService::new(walrus);
 let published = content
     .publish_content(b"paperproof content".to_vec(), ContentPublishOptions::default())
     .await?;
+```
+
+For signed mainnet writes without an HTTP publisher, use a local Walrus CLI
+configured with your wallet:
+
+```rust
+use paperproof_sdk_rs::{PaperProofContentService, WalrusCliClient};
+
+let content = PaperProofContentService::new(WalrusCliClient::new("walrus"));
 ```
 
 Native Rust read/verify and owned/shared preflight checks are implemented in

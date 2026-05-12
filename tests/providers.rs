@@ -14,7 +14,7 @@ async fn cli_executor_implements_execution_provider_build() {
     let executor = SuiCliExecutor::mainnet();
     let plan = client
         .publishing
-        .publish_preprint(&common::sample_preprint())
+        .finalize_reserved_preprint("0xabcd", &common::sample_preprint())
         .unwrap();
     let built = executor
         .build_transaction(

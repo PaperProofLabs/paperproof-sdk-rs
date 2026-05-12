@@ -56,25 +56,54 @@ fn main() -> paperproof_sdk_rs::Result<()> {
         return Ok(());
     }
 
-    let publish = client.publishing.publish_preprint(&PreprintInput {
-        title: format!("PaperProof Rust SDK smoke {nonce}"),
-        abstract_text: "Rust SDK mainnet smoke artifact. Created by an explicit opt-in example."
-            .to_string(),
-        authors: vec!["PaperProof Labs".to_string()],
-        keywords: vec!["rust".to_string(), "sdk".to_string()],
-        field: "computer science".to_string(),
-        license: "CC-BY-4.0".to_string(),
-        page_count: 1,
-        content: CommonContentInput {
-            content_hash: format!("sha256:paperproof-rs-smoke-{nonce}"),
-            walrus_blob_id: format!("paperproof-rs-smoke-{nonce}"),
-            walrus_blob_object_id: "0x6".to_string(),
-            content_type: "text/plain".to_string(),
-        },
-        series_metadata: vec![],
-        version_metadata: vec![],
-        payment_coin_id: None,
+    let owner = sender.clone().ok_or_else(|| {
+        paperproof_sdk_rs::PaperProofError::invalid_input(
+            "PAPERPROOF_RS_SENDER",
+            "preprint reserve/finalize smoke requires an explicit sender address",
+        )
     })?;
+    let reserve = client.publishing.reserve_preprint_code(&owner)?;
+    let reserve_output = executor.run(
+        &reserve,
+        &CliExecutionOptions {
+            sender: sender.clone(),
+            gas_budget: Some(50_000_000),
+            mode: mode.clone(),
+            ..Default::default()
+        },
+    )?;
+    println!("reserve output: {}", reserve_output.raw_stdout);
+    if !execute {
+        println!(
+            "Reserve dry run completed. Sui CLI dry-run output is text in recent CLI versions, so event parsing and finalize are only exercised with --execute."
+        );
+        return Ok(());
+    }
+    let reservation = reserve_output.preprint_reservation_result(&deployment)?;
+
+    let publish = client.publishing.finalize_reserved_preprint(
+        &reservation.reservation_id,
+        &PreprintInput {
+            title: format!("PaperProof Rust SDK smoke {nonce}"),
+            abstract_text:
+                "Rust SDK mainnet smoke artifact. Created by an explicit opt-in example."
+                    .to_string(),
+            authors: vec!["PaperProof Labs".to_string()],
+            keywords: vec!["rust".to_string(), "sdk".to_string()],
+            field: "computer science".to_string(),
+            license: "CC-BY-4.0".to_string(),
+            page_count: 1,
+            content: CommonContentInput {
+                content_hash: format!("sha256:paperproof-rs-smoke-{nonce}"),
+                walrus_blob_id: format!("paperproof-rs-smoke-{nonce}"),
+                walrus_blob_object_id: "0x6".to_string(),
+                content_type: "text/plain".to_string(),
+            },
+            series_metadata: vec![],
+            version_metadata: vec![],
+            payment_coin_id: None,
+        },
+    )?;
 
     let output = executor.run(
         &publish,

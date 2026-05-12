@@ -246,6 +246,12 @@ pub enum PaperProofDomainChange {
         registry_id: String,
         governance_config_id: String,
     },
+    PreprintCodeReserved {
+        reservation_id: String,
+        series_id: String,
+        reserver: String,
+        artifact_code: String,
+    },
     SeriesCreated {
         series_id: String,
         version_id: String,
@@ -593,6 +599,11 @@ impl PaperProofIndexerState {
                     governance_config_id.clone(),
                 );
             }
+            PaperProofDomainChange::PreprintCodeReserved { series_id, .. } => {
+                self.latest_series_versions
+                    .entry(series_id.clone())
+                    .or_default();
+            }
             PaperProofDomainChange::SeriesCreated {
                 series_id,
                 version_id,
@@ -806,6 +817,23 @@ pub fn domain_change_from_event(event: &IndexedPaperProofEvent) -> PaperProofDom
                 PaperProofDomainChange::GovernanceConfigBound {
                     registry_id,
                     governance_config_id,
+                }
+            } else {
+                PaperProofDomainChange::Unknown
+            }
+        }
+        PaperProofEventKind::PreprintCodeReserved => {
+            if let (Some(reservation_id), Some(series_id), Some(reserver), Some(artifact_code)) = (
+                string_field(fields, "reservation_id"),
+                string_field(fields, "series_id"),
+                string_field(fields, "reserver"),
+                string_field(fields, "artifact_code"),
+            ) {
+                PaperProofDomainChange::PreprintCodeReserved {
+                    reservation_id,
+                    series_id,
+                    reserver,
+                    artifact_code,
                 }
             } else {
                 PaperProofDomainChange::Unknown

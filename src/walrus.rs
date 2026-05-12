@@ -3,6 +3,11 @@
 
 use async_trait::async_trait;
 use sha2::{Digest, Sha256};
+use std::{
+    path::PathBuf,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::error::{PaperProofError, Result};
 
@@ -115,6 +120,42 @@ pub struct ContentReadResult {
 #[derive(Clone, Debug)]
 pub struct PaperProofContentService<B = WalrusClient> {
     pub backend: B,
+}
+
+#[derive(Clone, Debug)]
+pub struct WalrusCliClient {
+    pub cli_path: String,
+    pub aggregator_url: String,
+    pub extra_store_args: Vec<String>,
+}
+
+impl Default for WalrusCliClient {
+    fn default() -> Self {
+        Self::new("walrus")
+    }
+}
+
+impl WalrusCliClient {
+    pub fn new(cli_path: impl Into<String>) -> Self {
+        Self {
+            cli_path: cli_path.into(),
+            aggregator_url: "https://aggregator.walrus-mainnet.walrus.space".to_string(),
+            extra_store_args: Vec::new(),
+        }
+    }
+
+    pub fn with_aggregator_url(mut self, aggregator_url: impl Into<String>) -> Self {
+        self.aggregator_url = aggregator_url.into();
+        self
+    }
+
+    pub fn with_extra_store_args(
+        mut self,
+        args: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.extra_store_args = args.into_iter().map(Into::into).collect();
+        self
+    }
 }
 
 #[async_trait]
@@ -372,6 +413,137 @@ impl WalrusClient {
             raw,
         })
     }
+}
+
+#[async_trait]
+impl PaperProofContentBackend for WalrusCliClient {
+    async fn publish_content_backend(
+        &self,
+        bytes: Vec<u8>,
+        options: WalrusWriteOptions,
+    ) -> Result<serde_json::Value> {
+        let cli = self.clone();
+        let handle = tokio::task::spawn_blocking(move || cli.write_blob_sync(bytes, options));
+        handle
+            .await
+            .map_err(|err| PaperProofError::network("walrus cli", err.to_string()))?
+    }
+
+    async fn read_content_backend(&self, blob_id: &str) -> Result<WalrusBlob> {
+        WalrusClient::new(&self.aggregator_url, None)
+            .read_blob(blob_id)
+            .await
+    }
+
+    async fn read_and_verify_content_backend(
+        &self,
+        blob_id: &str,
+        expected_sha256_hex: &str,
+    ) -> Result<WalrusBlob> {
+        WalrusClient::new(&self.aggregator_url, None)
+            .read_and_verify_sha256(blob_id, expected_sha256_hex)
+            .await
+    }
+
+    async fn extend_content_backend(
+        &self,
+        blob_object_id: &str,
+        _options: WalrusExtendOptions,
+    ) -> Result<WalrusExtendResult> {
+        Err(PaperProofError::invalid_input(
+            "walrus_cli_extend",
+            format!(
+                "Walrus CLI extend is not implemented by this adapter yet for {blob_object_id}"
+            ),
+        ))
+    }
+
+    async fn transfer_owned_content_backend(
+        &self,
+        blob_object_id: &str,
+        _recipient: &str,
+        _options: WalrusTransferOptions,
+    ) -> Result<WalrusTransferResult> {
+        Err(PaperProofError::invalid_input(
+            "walrus_cli_transfer",
+            format!(
+                "Walrus CLI transfer is not implemented by this adapter yet for {blob_object_id}"
+            ),
+        ))
+    }
+}
+
+impl WalrusCliClient {
+    fn write_blob_sync(
+        &self,
+        bytes: Vec<u8>,
+        options: WalrusWriteOptions,
+    ) -> Result<serde_json::Value> {
+        let path = temp_walrus_path()?;
+        std::fs::write(&path, bytes)
+            .map_err(|err| PaperProofError::network(path.display().to_string(), err.to_string()))?;
+        let result = self.run_store_command(&path, options);
+        let _ = std::fs::remove_file(&path);
+        result
+    }
+
+    fn run_store_command(
+        &self,
+        path: &std::path::Path,
+        options: WalrusWriteOptions,
+    ) -> Result<serde_json::Value> {
+        let mut command = Command::new(&self.cli_path);
+        command
+            .arg("store")
+            .arg(path)
+            .arg("--epochs")
+            .arg(options.epochs.to_string())
+            .arg("--json");
+        if options.share {
+            command.arg("--share");
+        }
+        if options.deletable.unwrap_or(!options.share) {
+            command.arg("--deletable");
+        }
+        for arg in &self.extra_store_args {
+            command.arg(arg);
+        }
+        let output = command.output().map_err(|err| {
+            PaperProofError::network(
+                &self.cli_path,
+                format!("failed to launch walrus CLI: {err}"),
+            )
+        })?;
+        if !output.status.success() {
+            return Err(PaperProofError::network(
+                &self.cli_path,
+                format!(
+                    "walrus CLI exited with {}; stderr={}; stdout={}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr),
+                    String::from_utf8_lossy(&output.stdout)
+                ),
+            ));
+        }
+        serde_json::from_slice(&output.stdout).map_err(|err| {
+            PaperProofError::network(
+                &self.cli_path,
+                format!(
+                    "walrus CLI did not return JSON; error={err}; stdout={}; stderr={}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                ),
+            )
+        })
+    }
+}
+
+fn temp_walrus_path() -> Result<PathBuf> {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| PaperProofError::network("system_time", err.to_string()))?
+        .as_nanos();
+    Ok(std::env::temp_dir().join(format!("paperproof-walrus-{nanos}.bin")))
 }
 
 #[async_trait]

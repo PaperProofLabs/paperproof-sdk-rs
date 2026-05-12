@@ -1,0 +1,1 @@
+Generic text fixture for PaperProof generic_file handling.

@@ -55,6 +55,13 @@ fn walrus_write_options_default_to_share_as_non_deletable() {
 }
 
 #[test]
+fn walrus_cli_client_defaults_to_mainnet_reader() {
+    let client = walrus::WalrusCliClient::new("walrus-test");
+    assert_eq!(client.cli_path, "walrus-test");
+    assert!(client.aggregator_url.contains("mainnet"));
+}
+
+#[test]
 fn walrus_owned_blob_transfer_preflight_blocks_shared_or_non_owner() {
     let owned = serde_json::json!({ "owner": { "AddressOwner": "0xabc" } });
     assert!(walrus::assert_transferable_owned_blob("0x1", Some("0xabc"), &owned).is_ok());

@@ -1,6 +1,6 @@
 [package]
 name = "paperproof-sdk-rs"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 description = "Rust SDK for the PaperProof protocol on Sui"
 license = "Apache-2.0"
@@ -11,7 +11,7 @@ categories = ["api-bindings", "cryptography::cryptocurrencies"]
 include = [
     "src/**",
     "tests/**",
-    "examples/**",
+    "examples/*.rs",
     "benches/**",
     "docs/**",
     "deploy/**",
@@ -42,14 +42,14 @@ sha2 = "0.10"
 sui-rpc = { version = "0.3.1", optional = true }
 sui-sdk-types = { version = "0.3.1", features = ["serde", "hash"], optional = true }
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"], optional = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1"], optional = true }
 tracing = { version = "0.1", optional = true }
 
 [features]
 default = []
-async = ["tokio"]
-postgres = ["dep:tokio-postgres", "tokio"]
+async = []
+postgres = ["dep:tokio-postgres"]
 sqlite = ["dep:rusqlite"]
 sui-native = ["async", "dep:http", "dep:prost-types", "dep:sui-rpc", "dep:sui-sdk-types"]
 tracing = ["dep:tracing"]

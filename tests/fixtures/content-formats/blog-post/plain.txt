@@ -1,0 +1,3 @@
+PaperProof plain-text blog fixture.
+
+This file ensures blog_post still supports plain text alongside Markdown packages.

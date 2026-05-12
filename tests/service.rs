@@ -14,10 +14,10 @@ fn service_exposes_builders_and_preview_defaults() {
     let plan = service
         .client
         .publishing
-        .publish_preprint(&common::sample_preprint())
+        .finalize_reserved_preprint("0xabcd", &common::sample_preprint())
         .unwrap();
     assert_eq!(plan.calls.len(), 1);
-    assert!(plan.calls[0].target.ends_with("publish_preprint"));
+    assert!(plan.calls[0].target.ends_with("finalize_reserved_preprint"));
 }
 
 #[test]
@@ -28,8 +28,8 @@ fn provider_service_can_use_cli_fallback_provider() {
     let plan = service
         .client
         .publishing
-        .publish_preprint(&common::sample_preprint())
+        .reserve_preprint_code("0x1234")
         .unwrap();
     assert_eq!(plan.calls.len(), 1);
-    assert!(plan.calls[0].target.ends_with("publish_preprint"));
+    assert!(plan.calls[0].target.ends_with("reserve_preprint_code"));
 }

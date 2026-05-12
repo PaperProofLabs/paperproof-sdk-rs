@@ -190,11 +190,6 @@ pub fn validate_blog_post_input(input: &BlogPostInput) -> Result<()> {
         &input.summary,
         PROTOCOL_LIMITS.max_medium_text_bytes,
     )?;
-    validate_required_text(
-        "author_name",
-        &input.author_name,
-        PROTOCOL_LIMITS.max_vector_item_bytes,
-    )?;
     validate_text_vector(
         "tags",
         &input.tags,
@@ -202,8 +197,8 @@ pub fn validate_blog_post_input(input: &BlogPostInput) -> Result<()> {
         PROTOCOL_LIMITS.max_vector_item_bytes,
     )?;
     validate_required_text(
-        "license",
-        &input.license,
+        "language",
+        &input.language,
         PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
     validate_common_content(&input.content)?;
@@ -234,7 +229,12 @@ pub fn validate_technical_report_input(input: &TechnicalReportInput) -> Result<(
         &input.report_number,
         PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
-    validate_required_text("field", &input.field, PROTOCOL_LIMITS.max_short_text_bytes)?;
+    validate_text_vector(
+        "keywords",
+        &input.keywords,
+        PROTOCOL_LIMITS.max_keywords,
+        PROTOCOL_LIMITS.max_vector_item_bytes,
+    )?;
     validate_required_text(
         "license",
         &input.license,
@@ -252,22 +252,21 @@ pub fn validate_dataset_input(input: &DatasetInput) -> Result<()> {
         &input.description,
         PROTOCOL_LIMITS.max_long_text_bytes,
     )?;
-    validate_text_vector(
-        "authors",
-        &input.authors,
-        PROTOCOL_LIMITS.max_authors,
-        PROTOCOL_LIMITS.max_vector_item_bytes,
+    validate_required_text(
+        "format",
+        &input.format,
+        PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
-    validate_required_text("field", &input.field, PROTOCOL_LIMITS.max_short_text_bytes)?;
     validate_required_text(
         "license",
         &input.license,
         PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
-    validate_required_text(
-        "schema_hash",
-        &input.schema_hash,
-        PROTOCOL_LIMITS.max_content_hash_bytes,
+    validate_text_vector(
+        "keywords",
+        &input.keywords,
+        PROTOCOL_LIMITS.max_keywords,
+        PROTOCOL_LIMITS.max_vector_item_bytes,
     )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;

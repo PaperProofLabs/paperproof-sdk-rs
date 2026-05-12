@@ -146,8 +146,8 @@ fn main() -> paperproof_sdk_rs::Result<()> {
         let plan = runner
             .client
             .publishing
-            .publish_preprint(&sample_preprint_input(&runner.run_id, &account, 0))?;
-        runner.run(&account, "dry-run publish preprint", &plan)?;
+            .reserve_preprint_code(&account.address)?;
+        runner.run(&account, "dry-run reserve preprint code", &plan)?;
         let report = Report {
             run_id,
             mode: mode_label,
@@ -332,7 +332,13 @@ impl Runner {
         account: &Account,
         index: usize,
     ) -> paperproof_sdk_rs::Result<PublishResult> {
-        let plan = self.client.publishing.publish_preprint(&PreprintInput {
+        let reserve = self
+            .client
+            .publishing
+            .reserve_preprint_code(&account.address)?;
+        let reserve_output = self.run(account, "reserve preprint code", &reserve)?;
+        let reservation = reserve_output.preprint_reservation_result(&self.client.deployment)?;
+        let plan = self.client.publishing.finalize_reserved_preprint(&reservation.reservation_id, &PreprintInput {
             title: format!(
                 "PaperProof Rust SDK mainnet integration preprint {index} {}",
                 self.run_id
@@ -355,7 +361,7 @@ impl Runner {
             version_metadata: self.metadata("version-kind", "initial", index, 0),
             payment_coin_id: None,
         })?;
-        let output = self.run(account, "publish preprint", &plan)?;
+        let output = self.run(account, "finalize reserved preprint", &plan)?;
         output.publish_result(&self.client.deployment)
     }
 
@@ -814,35 +820,6 @@ fn hash_hex(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
     hex::encode(hasher.finalize())
-}
-
-fn sample_preprint_input(run_id: &str, account: &Account, index: usize) -> PreprintInput {
-    let digest = hash_hex(&format!("{run_id}:dry-run-preprint:{index}"));
-    PreprintInput {
-        title: format!("PaperProof Rust SDK dry-run preprint {index} {run_id}"),
-        abstract_text: "A Rust SDK dry-run artifact used to validate transaction construction."
-            .to_string(),
-        authors: vec!["PaperProof Labs".to_string(), account.key.clone()],
-        keywords: vec!["paperproof".to_string(), "rust-sdk".to_string()],
-        field: "computer science".to_string(),
-        license: "CC-BY-4.0".to_string(),
-        page_count: 1,
-        content: CommonContentInput {
-            content_hash: format!("sha256:{digest}"),
-            walrus_blob_id: format!("dry-run-{index}-{}", &digest[0..24]),
-            walrus_blob_object_id: format!("0x{digest}"),
-            content_type: "text/plain".to_string(),
-        },
-        series_metadata: vec![MetadataAttribute {
-            key: "run".to_string(),
-            value: run_id.to_string(),
-        }],
-        version_metadata: vec![MetadataAttribute {
-            key: "kind".to_string(),
-            value: "dry-run".to_string(),
-        }],
-        payment_coin_id: None,
-    }
 }
 
 fn write_report(report: &Report) -> paperproof_sdk_rs::Result<PathBuf> {

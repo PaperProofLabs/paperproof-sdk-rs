@@ -4,7 +4,7 @@
 mod common;
 
 use paperproof_sdk_rs::{
-    PaperProofClient, TransactionPlan,
+    PaperProofClient, TransactionPlan, TransactionValueRef,
     constants::{comment_status, tree_status},
     deployment::mainnet_deployment,
     governance,
@@ -16,20 +16,251 @@ use paperproof_sdk_rs::{
 };
 
 #[test]
-fn builds_publish_preprint_call() {
+fn direct_publish_preprint_is_disabled() {
     let client = PaperProofClient::mainnet();
-    let plan = client
+    let error = client
         .publishing
         .publish_preprint(&common::sample_preprint())
-        .unwrap();
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("direct preprint publishing is disabled"));
+}
+
+#[test]
+fn builds_preprint_reserve_and_finalize_calls() {
+    let client = PaperProofClient::mainnet();
+    let owner = "0x1234";
+    let plan = client.publishing.reserve_preprint_code(owner).unwrap();
     assert_eq!(plan.calls.len(), 1);
+    assert_eq!(plan.transfers.len(), 1);
     let call = &plan.calls[0];
-    assert!(call.target.ends_with("::publishing::publish_preprint"));
+    assert!(call.target.ends_with("::publishing::reserve_preprint_code"));
     assert_eq!(
         call.arguments[0],
         MoveArgument::Object(mainnet_deployment().objects.root)
     );
-    assert_eq!(call.arguments.len(), 19);
+    assert_eq!(call.arguments.len(), 5);
+    assert_eq!(
+        plan.transfers[0].objects,
+        vec![TransactionValueRef::LastResult]
+    );
+    assert_eq!(plan.transfers[0].recipient, owner);
+
+    let finalize = client
+        .publishing
+        .finalize_reserved_preprint("0xabcd", &common::sample_preprint())
+        .unwrap();
+    assert_eq!(finalize.calls.len(), 1);
+    assert!(
+        finalize.calls[0]
+            .target
+            .ends_with("::publishing::finalize_reserved_preprint")
+    );
+    assert_eq!(
+        finalize.calls[0].arguments[0],
+        MoveArgument::Object("0xabcd".to_string())
+    );
+    assert_eq!(finalize.calls[0].arguments.len(), 20);
+}
+
+#[test]
+fn publishing_builders_match_current_contract_abi() {
+    let client = PaperProofClient::mainnet();
+    let deployment = mainnet_deployment();
+    let preprint = common::sample_preprint();
+    let finalize = client
+        .publishing
+        .finalize_reserved_preprint("0xabcd", &preprint)
+        .unwrap();
+    assert_call_shape(
+        &finalize.calls[0],
+        "finalize_reserved_preprint",
+        20,
+        &[
+            (0, MoveArgument::Object("0xabcd".to_string())),
+            (1, MoveArgument::Object(deployment.objects.root.clone())),
+            (
+                2,
+                MoveArgument::Object(deployment.objects.type_registry.clone()),
+            ),
+            (
+                3,
+                MoveArgument::Object(deployment.objects.governance_vault.clone()),
+            ),
+            (
+                4,
+                MoveArgument::Object(deployment.objects.fee_manager.clone()),
+            ),
+            (5, MoveArgument::String(preprint.title.clone())),
+            (6, MoveArgument::String(preprint.abstract_text.clone())),
+            (7, MoveArgument::StringVector(preprint.authors.clone())),
+            (8, MoveArgument::StringVector(preprint.keywords.clone())),
+            (9, MoveArgument::String(preprint.field.clone())),
+            (10, MoveArgument::String(preprint.license.clone())),
+            (11, MoveArgument::U64(preprint.page_count)),
+            (
+                12,
+                MoveArgument::String(preprint.content.content_hash.clone()),
+            ),
+            (
+                13,
+                MoveArgument::String(preprint.content.walrus_blob_id.clone()),
+            ),
+            (
+                14,
+                MoveArgument::String(preprint.content.walrus_blob_object_id.clone()),
+            ),
+            (
+                15,
+                MoveArgument::String(preprint.content.content_type.clone()),
+            ),
+            (19, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    assert!(matches!(
+        finalize.calls[0].arguments[16],
+        MoveArgument::MetadataVector(_)
+    ));
+    assert!(matches!(
+        finalize.calls[0].arguments[17],
+        MoveArgument::MetadataVector(_)
+    ));
+    assert!(matches!(
+        finalize.calls[0].arguments[18],
+        MoveArgument::OptionalObject(None)
+    ));
+
+    let content = common::sample_content();
+
+    let blog = client
+        .publishing
+        .publish_blog_post(&common::sample_blog_post())
+        .unwrap();
+    assert_call_shape(
+        &blog.calls[0],
+        "publish_blog_post",
+        16,
+        &[
+            (4, MoveArgument::String("PaperProof SDK blog".to_string())),
+            (
+                5,
+                MoveArgument::String("A local SDK blog test.".to_string()),
+            ),
+            (6, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (7, MoveArgument::String("en".to_string())),
+            (8, MoveArgument::String(content.content_hash.clone())),
+            (9, MoveArgument::String(content.walrus_blob_id.clone())),
+            (
+                10,
+                MoveArgument::String(content.walrus_blob_object_id.clone()),
+            ),
+            (11, MoveArgument::String(content.content_type.clone())),
+            (15, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let report = client
+        .publishing
+        .publish_technical_report(&common::sample_technical_report())
+        .unwrap();
+    assert_call_shape(
+        &report.calls[0],
+        "publish_technical_report",
+        19,
+        &[
+            (4, MoveArgument::String("PaperProof SDK report".to_string())),
+            (
+                5,
+                MoveArgument::String("A local SDK technical report test.".to_string()),
+            ),
+            (
+                6,
+                MoveArgument::StringVector(vec!["PaperProof Labs".to_string()]),
+            ),
+            (7, MoveArgument::String("PaperProof Labs".to_string())),
+            (8, MoveArgument::String("PPRF-RS-001".to_string())),
+            (9, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (10, MoveArgument::String("CC-BY-4.0".to_string())),
+            (11, MoveArgument::String(content.content_hash.clone())),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let dataset = client
+        .publishing
+        .publish_dataset(&common::sample_dataset())
+        .unwrap();
+    assert_call_shape(
+        &dataset.calls[0],
+        "publish_dataset",
+        19,
+        &[
+            (
+                4,
+                MoveArgument::String("PaperProof SDK dataset".to_string()),
+            ),
+            (
+                5,
+                MoveArgument::String("A local SDK dataset test.".to_string()),
+            ),
+            (6, MoveArgument::String("csv".to_string())),
+            (7, MoveArgument::U64(1)),
+            (8, MoveArgument::U64(128)),
+            (9, MoveArgument::String("CC-BY-4.0".to_string())),
+            (10, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (11, MoveArgument::String(content.content_hash.clone())),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let software = client
+        .publishing
+        .publish_software_release(&common::sample_software_release())
+        .unwrap();
+    assert_call_shape(
+        &software.calls[0],
+        "publish_software_release",
+        19,
+        &[
+            (4, MoveArgument::String("paperproof-sdk-rs".to_string())),
+            (5, MoveArgument::String("0.1.0".to_string())),
+            (6, MoveArgument::String("sha256:source".to_string())),
+            (7, MoveArgument::String("sha256:package".to_string())),
+            (8, MoveArgument::String("Initial test release".to_string())),
+            (9, MoveArgument::String("Apache-2.0".to_string())),
+            (
+                10,
+                MoveArgument::String(
+                    "https://github.com/PaperProofLabs/paperproof-sdk-rs".to_string(),
+                ),
+            ),
+            (11, MoveArgument::String(content.content_hash.clone())),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let generic = client
+        .publishing
+        .publish_generic_file(&common::sample_generic_file())
+        .unwrap();
+    assert_call_shape(
+        &generic.calls[0],
+        "publish_generic_file",
+        17,
+        &[
+            (4, MoveArgument::String("PaperProof SDK file".to_string())),
+            (
+                5,
+                MoveArgument::String("A local SDK generic file test.".to_string()),
+            ),
+            (6, MoveArgument::String("paperproof-sdk-rs.txt".to_string())),
+            (7, MoveArgument::U64(128)),
+            (8, MoveArgument::String("Apache-2.0".to_string())),
+            (9, MoveArgument::String(content.content_hash.clone())),
+            (16, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
 }
 
 #[test]
@@ -56,49 +287,173 @@ fn builds_add_software_release_version_call() {
 #[test]
 fn builds_all_add_version_calls() {
     let client = PaperProofClient::mainnet();
-    let cases = [
-        client
-            .publishing
-            .add_blog_post_version(&AddVersionInput {
-                series_id: "0x1234".to_string(),
-                body: common::sample_blog_post(),
-            })
-            .unwrap(),
-        client
-            .publishing
-            .add_technical_report_version(&AddVersionInput {
-                series_id: "0x1234".to_string(),
-                body: common::sample_technical_report(),
-            })
-            .unwrap(),
-        client
-            .publishing
-            .add_dataset_version(&AddVersionInput {
-                series_id: "0x1234".to_string(),
-                body: common::sample_dataset(),
-            })
-            .unwrap(),
-        client
-            .publishing
-            .add_generic_file_version(&AddVersionInput {
-                series_id: "0x1234".to_string(),
-                body: common::sample_generic_file(),
-            })
-            .unwrap(),
-    ];
-    let expected = [
+    let deployment = mainnet_deployment();
+    let series = "0x1234".to_string();
+
+    let preprint = client
+        .publishing
+        .add_preprint_version(&AddVersionInput {
+            series_id: series.clone(),
+            body: common::sample_preprint(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &preprint.calls[0],
+        "add_preprint_version",
+        19,
+        &[
+            (
+                5,
+                MoveArgument::String("A PaperProof Test Preprint".to_string()),
+            ),
+            (
+                6,
+                MoveArgument::String("A local SDK test record.".to_string()),
+            ),
+            (
+                7,
+                MoveArgument::StringVector(vec!["PaperProof Labs".to_string()]),
+            ),
+            (8, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (9, MoveArgument::String("computer science".to_string())),
+            (10, MoveArgument::String("CC-BY-4.0".to_string())),
+            (11, MoveArgument::U64(12)),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let blog = client
+        .publishing
+        .add_blog_post_version(&AddVersionInput {
+            series_id: series.clone(),
+            body: common::sample_blog_post(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &blog.calls[0],
         "add_blog_post_version",
+        16,
+        &[
+            (5, MoveArgument::String("PaperProof SDK blog".to_string())),
+            (
+                6,
+                MoveArgument::String("A local SDK blog test.".to_string()),
+            ),
+            (7, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (8, MoveArgument::String("en".to_string())),
+            (15, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let report = client
+        .publishing
+        .add_technical_report_version(&AddVersionInput {
+            series_id: series.clone(),
+            body: common::sample_technical_report(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &report.calls[0],
         "add_technical_report_version",
+        19,
+        &[
+            (5, MoveArgument::String("PaperProof SDK report".to_string())),
+            (
+                6,
+                MoveArgument::String("A local SDK technical report test.".to_string()),
+            ),
+            (
+                7,
+                MoveArgument::StringVector(vec!["PaperProof Labs".to_string()]),
+            ),
+            (8, MoveArgument::String("PaperProof Labs".to_string())),
+            (9, MoveArgument::String("PPRF-RS-001".to_string())),
+            (10, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (11, MoveArgument::String("CC-BY-4.0".to_string())),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let dataset = client
+        .publishing
+        .add_dataset_version(&AddVersionInput {
+            series_id: series.clone(),
+            body: common::sample_dataset(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &dataset.calls[0],
         "add_dataset_version",
+        19,
+        &[
+            (
+                5,
+                MoveArgument::String("PaperProof SDK dataset".to_string()),
+            ),
+            (
+                6,
+                MoveArgument::String("A local SDK dataset test.".to_string()),
+            ),
+            (7, MoveArgument::String("csv".to_string())),
+            (8, MoveArgument::U64(1)),
+            (9, MoveArgument::U64(128)),
+            (10, MoveArgument::String("CC-BY-4.0".to_string())),
+            (11, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let software = client
+        .publishing
+        .add_software_release_version(&AddVersionInput {
+            series_id: series.clone(),
+            body: common::sample_software_release(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &software.calls[0],
+        "add_software_release_version",
+        19,
+        &[
+            (5, MoveArgument::String("paperproof-sdk-rs".to_string())),
+            (6, MoveArgument::String("0.1.0".to_string())),
+            (7, MoveArgument::String("sha256:source".to_string())),
+            (8, MoveArgument::String("sha256:package".to_string())),
+            (9, MoveArgument::String("Initial test release".to_string())),
+            (10, MoveArgument::String("Apache-2.0".to_string())),
+            (
+                11,
+                MoveArgument::String(
+                    "https://github.com/PaperProofLabs/paperproof-sdk-rs".to_string(),
+                ),
+            ),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let generic = client
+        .publishing
+        .add_generic_file_version(&AddVersionInput {
+            series_id: series,
+            body: common::sample_generic_file(),
+        })
+        .unwrap();
+    assert_add_version_shape(
+        &generic.calls[0],
         "add_generic_file_version",
-    ];
-    for (plan, expected) in cases.iter().zip(expected) {
-        assert!(plan.calls[0].target.ends_with(expected));
-        assert_eq!(
-            plan.calls[0].arguments[2],
-            MoveArgument::Object("0x1234".to_string())
-        );
-    }
+        17,
+        &[
+            (5, MoveArgument::String("PaperProof SDK file".to_string())),
+            (
+                6,
+                MoveArgument::String("A local SDK generic file test.".to_string()),
+            ),
+            (7, MoveArgument::String("paperproof-sdk-rs.txt".to_string())),
+            (8, MoveArgument::U64(128)),
+            (9, MoveArgument::String("Apache-2.0".to_string())),
+            (16, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
 }
 
 #[test]
@@ -223,4 +578,41 @@ fn transaction_plan_can_batch_calls() {
     plan.calls.extend(client.ops.set_paused(true).calls);
     plan.calls.extend(client.ops.set_paused(false).calls);
     assert_eq!(plan.calls.len(), 2);
+}
+
+fn assert_call_shape(
+    call: &paperproof_sdk_rs::MoveCall,
+    function: &str,
+    argument_count: usize,
+    expected_arguments: &[(usize, MoveArgument)],
+) {
+    assert!(call.target.ends_with(function), "target={}", call.target);
+    assert_eq!(
+        call.arguments.len(),
+        argument_count,
+        "target={}",
+        call.target
+    );
+    for (index, expected) in expected_arguments {
+        assert_eq!(
+            call.arguments[*index], *expected,
+            "target={} argument[{index}]",
+            call.target
+        );
+    }
+}
+
+fn assert_add_version_shape(
+    call: &paperproof_sdk_rs::MoveCall,
+    function: &str,
+    argument_count: usize,
+    expected_arguments: &[(usize, MoveArgument)],
+) {
+    assert_call_shape(
+        call,
+        function,
+        argument_count,
+        &[(2, MoveArgument::Object("0x1234".to_string()))],
+    );
+    assert_call_shape(call, function, argument_count, expected_arguments);
 }

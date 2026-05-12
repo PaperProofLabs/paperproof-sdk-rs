@@ -35,6 +35,7 @@ pub enum PaperProofEventKind {
     FeeManagerCreated,
     GovernanceConfigCreated,
     GovernanceConfigBound,
+    PreprintCodeReserved,
     ArtifactPublished,
     ArtifactVersionAdded,
     SeriesMetadataUpdated,
@@ -92,6 +93,15 @@ pub struct PublishResult {
     pub likes_book_id: String,
     pub artifact_code: String,
     pub artifact_type: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PreprintReservationResult {
+    pub reservation_id: String,
+    pub series_id: String,
+    pub reserver: String,
+    pub artifact_code: String,
+    pub created_at_ms: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -220,6 +230,9 @@ pub fn classify_event_type(event_type: &str) -> PaperProofEventKind {
         }
         "GovernanceConfigBound" | "GovernanceConfigBoundEvent" => {
             PaperProofEventKind::GovernanceConfigBound
+        }
+        "PreprintCodeReserved" | "PreprintCodeReservedEvent" => {
+            PaperProofEventKind::PreprintCodeReserved
         }
         "ArtifactPublished" | "ArtifactPublishedEvent" => PaperProofEventKind::ArtifactPublished,
         "ArtifactVersionAdded" | "ArtifactVersionAddedEvent" => {
@@ -391,6 +404,21 @@ pub fn extract_publish_result(
         likes_book_id: required_string(fields, "likes_book_id")?,
         artifact_code: required_string(fields, "artifact_code")?,
         artifact_type: required_u64(fields, "artifact_type")?,
+    })
+}
+
+pub fn extract_preprint_reservation_result(
+    events: &[SuiEventEnvelope],
+    deployment: Option<&Deployment>,
+) -> Result<PreprintReservationResult> {
+    let event = require_first_event(events, "PreprintCodeReservedEvent", deployment)?;
+    let fields = &event.parsed_json;
+    Ok(PreprintReservationResult {
+        reservation_id: required_string(fields, "reservation_id")?,
+        series_id: required_string(fields, "series_id")?,
+        reserver: required_string(fields, "reserver")?,
+        artifact_code: required_string(fields, "artifact_code")?,
+        created_at_ms: required_u64(fields, "created_at_ms")?,
     })
 }
 

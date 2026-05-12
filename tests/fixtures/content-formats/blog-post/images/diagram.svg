@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 240 80">
+  <rect width="240" height="80" fill="#f6f7f9"/>
+  <circle cx="40" cy="40" r="18" fill="#2f6fed"/>
+  <text x="72" y="46" font-family="Arial" font-size="16">PaperProof fixture</text>
+</svg>

@@ -98,6 +98,16 @@ where
                 )
                 .await;
             }
+            "PreprintCodeReservedEvent" => {
+                bindings.insert(
+                    "preprint_reservation".to_string(),
+                    json!({
+                        "reservation_id": fields.get("reservation_id").cloned(),
+                        "series_id": fields.get("series_id").cloned(),
+                        "artifact_code": fields.get("artifact_code").cloned(),
+                    }),
+                );
+            }
             "CommentAddedEvent" => {
                 self.verify_comment(fields, &mut issues, &mut bindings)
                     .await;

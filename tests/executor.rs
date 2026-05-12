@@ -14,7 +14,7 @@ fn renders_publish_plan_for_sui_cli_preview() {
     let executor = SuiCliExecutor::mainnet();
     let plan = client
         .publishing
-        .publish_preprint(&common::sample_preprint())
+        .finalize_reserved_preprint("0xabcd", &common::sample_preprint())
         .unwrap();
     let args = executor
         .to_cli_args(
@@ -26,11 +26,26 @@ fn renders_publish_plan_for_sui_cli_preview() {
         )
         .unwrap();
     let joined = args.join(" ");
-    assert!(joined.contains("publish_preprint"));
+    assert!(joined.contains("finalize_reserved_preprint"));
     assert!(joined.contains("metadata_attribute"));
     assert!(joined.contains("<0x1::string::String>"));
     assert!(joined.contains("--preview"));
     assert!(joined.contains("--json"));
+}
+
+#[test]
+fn renders_reserve_return_transfer_for_sui_cli_preview() {
+    let client = PaperProofClient::mainnet();
+    let executor = SuiCliExecutor::mainnet();
+    let owner = "0x1234";
+    let plan = client.publishing.reserve_preprint_code(owner).unwrap();
+    let args = executor
+        .to_cli_args(&plan, &CliExecutionOptions::default())
+        .unwrap();
+    let joined = args.join(" ");
+    assert!(joined.contains("reserve_preprint_code"));
+    assert!(joined.contains("--assign last_result_0"));
+    assert!(joined.contains("--transfer-objects [last_result_0] @0x1234"));
 }
 
 #[test]

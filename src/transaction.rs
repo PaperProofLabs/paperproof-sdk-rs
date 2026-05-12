@@ -6,11 +6,16 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TransactionPlan {
     pub calls: Vec<MoveCall>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transfers: Vec<TransferObjects>,
 }
 
 impl TransactionPlan {
     pub fn new() -> Self {
-        Self { calls: Vec::new() }
+        Self {
+            calls: Vec::new(),
+            transfers: Vec::new(),
+        }
     }
 
     pub fn push(&mut self, call: MoveCall) {
@@ -18,7 +23,10 @@ impl TransactionPlan {
     }
 
     pub fn single(call: MoveCall) -> Self {
-        Self { calls: vec![call] }
+        Self {
+            calls: vec![call],
+            transfers: Vec::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -36,6 +44,19 @@ impl Default for TransactionPlan {
 pub struct MoveCall {
     pub target: String,
     pub arguments: Vec<MoveArgument>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct TransferObjects {
+    pub objects: Vec<TransactionValueRef>,
+    pub recipient: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(tag = "kind", content = "value")]
+pub enum TransactionValueRef {
+    Variable(String),
+    LastResult,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

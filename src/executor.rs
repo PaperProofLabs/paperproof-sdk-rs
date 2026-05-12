@@ -11,14 +11,15 @@ use crate::{
     deployment::Deployment,
     error::{PaperProofError, Result},
     events::{
-        AddVersionResult, CommentResult, LikeResult, ProposalExecutedResult,
-        ProposalFinalizedResult, ProposalResult, PublishResult, SuiEventEnvelope, VoteCastResult,
+        AddVersionResult, CommentResult, LikeResult, PreprintReservationResult,
+        ProposalExecutedResult, ProposalFinalizedResult, ProposalResult, PublishResult,
+        SuiEventEnvelope, VoteCastResult,
     },
     providers::{
         BuiltTransaction, PaperProofExecutionProvider, ProviderExecutionOptions,
         ProviderExecutionOutput,
     },
-    transaction::{MoveArgument, MoveCall, TransactionPlan},
+    transaction::{MoveArgument, MoveCall, TransactionPlan, TransactionValueRef, TransferObjects},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -81,6 +82,13 @@ impl CliExecutionOutput {
 
     pub fn publish_result(&self, deployment: &Deployment) -> Result<PublishResult> {
         crate::events::extract_publish_result(&self.events()?, Some(deployment))
+    }
+
+    pub fn preprint_reservation_result(
+        &self,
+        deployment: &Deployment,
+    ) -> Result<PreprintReservationResult> {
+        crate::events::extract_preprint_reservation_result(&self.events()?, Some(deployment))
     }
 
     pub fn add_version_result(&self, deployment: &Deployment) -> Result<AddVersionResult> {
@@ -165,6 +173,9 @@ impl SuiCliExecutor {
         for call in &plan.calls {
             self.append_move_call(&mut args, call, &mut temp_counter)?;
         }
+        for transfer in &plan.transfers {
+            self.append_transfer(&mut args, transfer, &mut temp_counter)?;
+        }
         if let Some(sender) = &options.sender {
             crate::validation::validate_address(sender)?;
             args.extend(["--sender".to_string(), format!("@{sender}")]);
@@ -234,6 +245,37 @@ impl SuiCliExecutor {
             call.target.clone(),
             "".to_string(),
             function_args.join(" "),
+        ]);
+        Ok(())
+    }
+
+    fn append_transfer(
+        &self,
+        args: &mut Vec<String>,
+        transfer: &TransferObjects,
+        temp_counter: &mut usize,
+    ) -> Result<()> {
+        crate::validation::validate_address(&transfer.recipient)?;
+        if transfer.objects.is_empty() {
+            return Err(PaperProofError::TransactionBuild {
+                message: "transfer command must contain at least one object".to_string(),
+            });
+        }
+        let mut objects = Vec::new();
+        for object in &transfer.objects {
+            match object {
+                TransactionValueRef::Variable(name) => objects.push(name.clone()),
+                TransactionValueRef::LastResult => {
+                    let name = next_temp("last_result", temp_counter);
+                    args.extend(["--assign".to_string(), name.clone()]);
+                    objects.push(name);
+                }
+            }
+        }
+        args.extend([
+            "--transfer-objects".to_string(),
+            format!("[{}]", objects.join(",")),
+            format!("@{}", transfer.recipient),
         ]);
         Ok(())
     }

@@ -195,6 +195,11 @@ pub fn check_canonical_paperproof_event(
                 untrusted("artifact version event is missing series/version ids")
             }
         }
+        "PreprintCodeReservedEvent" => require_fields(
+            fields,
+            &["reservation_id", "series_id", "reserver", "artifact_code"],
+            "preprint reservation event is missing reservation/series/code fields",
+        ),
         "CommentAddedEvent" => require_fields(
             fields,
             &["tree_id", "comment_id"],
