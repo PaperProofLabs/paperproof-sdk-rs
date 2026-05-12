@@ -1,0 +1,18 @@
+PaperProof SDK for Rust
+Copyright (c) 2026 PaperProof Labs
+
+This product includes software developed by PaperProof Labs.
+
+PaperProof Protocol refers to the open protocol layer and official deployed
+protocol instances. PaperProof Labs refers to the originating team and
+maintainer of the official interface, SDKs, reference indexer, documentation,
+and brand identity.
+
+The Apache License 2.0 grants rights to the SDK code only. It does not grant
+PaperProof trademarks, official status, official deployment authority, protocol
+governance authority, protected PaperProof contract source, protected official
+app source, or protected PaperProof documentation and brand materials.
+
+Forks, wrappers, integrations, and derivative SDK packages must not falsely
+claim official PaperProof status or imply endorsement by PaperProof Labs unless
+separately authorized.

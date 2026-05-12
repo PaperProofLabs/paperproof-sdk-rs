@@ -23,6 +23,26 @@ short-term historical backfills and migration paths.
 paperproof-sdk-rs = { git = "https://github.com/PaperProofLabs/paperproof-sdk-rs" }
 ```
 
+## License and Identity
+
+This SDK is licensed under Apache-2.0 to encourage broad integration,
+experimentation, commercial use, audits, forks, indexers, services, and tooling
+around PaperProof and Sui. The Apache-2.0 license applies to this SDK code. It
+does not grant rights to PaperProof trademarks, official status, official
+deployment authority, protocol governance authority, protected PaperProof
+contract source, protected official app source, or protected PaperProof
+documentation and brand materials.
+
+PaperProof Protocol refers to the open protocol layer and official deployed
+protocol instances. PaperProof Labs refers to the originating team and
+maintainer of the official interface, SDKs, reference indexer, documentation,
+and brand identity.
+
+You may use, fork, modify, and redistribute this SDK under Apache-2.0. If you
+publish a fork, wrapper, or integration, make its modified or unofficial status
+clear and do not imply endorsement by PaperProof Labs unless separately
+authorized.
+
 After the crate is published to crates.io:
 
 ```toml
