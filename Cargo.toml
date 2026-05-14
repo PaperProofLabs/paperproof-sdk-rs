@@ -10,21 +10,17 @@ keywords = ["paperproof", "sui", "sdk", "walrus", "move"]
 categories = ["api-bindings", "cryptography::cryptocurrencies"]
 include = [
     "src/**",
-    "tests/**",
     "examples/*.rs",
-    "benches/**",
     "docs/**",
-    "deploy/**",
     "sql/**",
-    "scripts/**",
-    ".github/workflows/ci.yml",
-    "Dockerfile",
-    ".dockerignore",
+    "scripts/verify-package.ps1",
+    "scripts/publish-check.ps1",
     "Cargo.toml",
     "Cargo.lock",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/NOTICE",
 ]
 
 [dependencies]
