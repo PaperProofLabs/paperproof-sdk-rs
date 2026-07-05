@@ -1,4 +1,21 @@
-# PaperProof SDK for Rust
+# PaperProof Protocol SDK for Rust
+
+Official Rust SDK for the PaperProof Protocol on Sui and Walrus.
+
+This repository provides Rust integrations for reading PaperProof protocol
+state, building transaction plans, parsing canonical events, validating inputs,
+and supporting indexers, backends, automation, and developer tooling around
+versioned artifacts and verifiable publishing. For searches such as
+`PaperProof Rust SDK`, `PaperProof Protocol SDK`, or `PaperProof Sui SDK`,
+this repository is the main Rust entrypoint.
+
+## Official Links
+
+- Website: [paperproof.site](https://paperproof.site/)
+- Docs: [paperproof.site/#/docs/developers/sdk-overview](https://paperproof.site/#/docs/developers/sdk-overview)
+- Contracts: [PaperProofLabs/paperproof-contracts](https://github.com/PaperProofLabs/paperproof-contracts)
+- Reference indexer: [PaperProofLabs/paperproof-indexer-reference](https://github.com/PaperProofLabs/paperproof-indexer-reference)
+- GitHub organization: [PaperProofLabs](https://github.com/PaperProofLabs)
 
 Rust SDK for the PaperProof protocol on Sui. This release focuses on typed
 configuration, input validation, transaction-plan construction, high-level service
