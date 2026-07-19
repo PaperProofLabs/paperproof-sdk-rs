@@ -57,7 +57,7 @@ async fn query_verified_events_reports_binding_failures() {
     let addr = listener.local_addr().expect("local addr");
     let deployment_for_thread = deployment.clone();
     thread::spawn(move || {
-        for _ in 0..5 {
+        for _ in 0..8 {
             let Ok((mut stream, _)) = listener.accept() else {
                 return;
             };

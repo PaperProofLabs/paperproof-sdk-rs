@@ -265,6 +265,7 @@ pub fn manifest_from_value(value: Value) -> Result<DeploymentManifest> {
 }
 
 fn normalize_manifest_value(mut value: Value) -> Value {
+    hoist_top_level_package_history_into_deployment(&mut value);
     if let Some(deployment) = value.get_mut("deployment") {
         normalize_deployment_value(deployment);
     } else {
@@ -272,6 +273,22 @@ fn normalize_manifest_value(mut value: Value) -> Value {
     }
     normalize_top_level_manifest_keys(&mut value);
     value
+}
+
+fn hoist_top_level_package_history_into_deployment(value: &mut Value) {
+    let Some(root) = value.as_object_mut() else {
+        return;
+    };
+    let Some(history) = root.remove("packageHistory").or_else(|| root.remove("package_history")) else {
+        return;
+    };
+    let Some(deployment) = root.get_mut("deployment").and_then(Value::as_object_mut) else {
+        root.insert("package_history".to_string(), history);
+        return;
+    };
+    if !deployment.contains_key("package_history") && !deployment.contains_key("packageHistory") {
+        deployment.insert("package_history".to_string(), history);
+    }
 }
 
 fn normalize_top_level_manifest_keys(value: &mut Value) {

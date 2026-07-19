@@ -15,6 +15,8 @@ use paperproof_sdk_rs::{
     PreprintInput, SetCommentStatusInput, SuiCliExecutor,
     constants::{comment_status, tree_status},
     events::{AddVersionResult, CommentResult, PublishResult},
+    read::PaperProofReadClient,
+    client::JsonRpcClient,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -35,6 +37,8 @@ struct SeriesContext {
     version_id: String,
     comments_tree_id: String,
     likes_book_id: String,
+    control_record_id: String,
+    controller_nft_id: String,
     first_comment_id: Option<u64>,
 }
 
@@ -180,12 +184,15 @@ fn main() -> paperproof_sdk_rs::Result<()> {
             "published {} series={} tree={}",
             account.key, publish.series_id, publish.comments_tree_id
         );
+        let series_id = publish.series_id.clone();
         contexts.push(SeriesContext {
             owner: account,
-            series_id: publish.series_id,
+            series_id: series_id.clone(),
             version_id: publish.version_id,
             comments_tree_id: publish.comments_tree_id,
             likes_book_id: publish.likes_book_id,
+            control_record_id: runner.resolve_control_record_id(&series_id)?,
+            controller_nft_id: runner.resolve_controller_nft_id(&series_id)?,
             first_comment_id: None,
         });
     }
@@ -407,6 +414,8 @@ impl Runner {
             .publishing
             .add_preprint_version(&AddVersionInput {
                 series_id: context.series_id.clone(),
+                control_record_id: context.control_record_id.clone(),
+                controller_nft_id: context.controller_nft_id.clone(),
                 body: PreprintInput {
                     title: format!(
                         "PaperProof Rust SDK versioned preprint {round} {}",
@@ -447,6 +456,8 @@ impl Runner {
             .publishing
             .add_generic_file_version(&AddVersionInput {
                 series_id: context.series_id.clone(),
+                control_record_id: context.control_record_id.clone(),
+                controller_nft_id: context.controller_nft_id.clone(),
                 body: GenericFileInput {
                     title: format!(
                         "PaperProof Rust SDK generic file update {round} {}",
@@ -533,10 +544,15 @@ impl Runner {
         context: &SeriesContext,
         round: usize,
     ) -> paperproof_sdk_rs::Result<()> {
-        let plan = self.client.publishing.update_series_metadata(
-            &context.series_id,
-            self.metadata("series-update", &round.to_string(), self.txs.len(), round),
-        )?;
+        let plan = self
+            .client
+            .publishing
+            .update_series_metadata(&paperproof_sdk_rs::types::UpdateSeriesMetadataInput {
+                series_id: context.series_id.clone(),
+                control_record_id: context.control_record_id.clone(),
+                controller_nft_id: context.controller_nft_id.clone(),
+                metadata: self.metadata("series-update", &round.to_string(), self.txs.len(), round),
+            })?;
         self.run(&context.owner, "update series metadata", &plan)?;
         Ok(())
     }
@@ -553,6 +569,8 @@ impl Runner {
             .comments
             .set_comment_status(&SetCommentStatusInput {
                 tree_id: context.comments_tree_id.clone(),
+                control_record_id: context.control_record_id.clone(),
+                controller_nft_id: context.controller_nft_id.clone(),
                 comment_id,
                 status,
             })?;
@@ -572,9 +590,56 @@ impl Runner {
         let plan = self
             .client
             .comments
-            .set_tree_status(&context.comments_tree_id, status)?;
+            .set_tree_status(&paperproof_sdk_rs::types::SetTreeStatusInput {
+                tree_id: context.comments_tree_id.clone(),
+                control_record_id: context.control_record_id.clone(),
+                controller_nft_id: context.controller_nft_id.clone(),
+                status,
+            })?;
         self.run(&context.owner, &format!("set tree status {status}"), &plan)?;
         Ok(())
+    }
+
+    fn resolve_control_record_id(&self, series_id: &str) -> paperproof_sdk_rs::Result<String> {
+        let snapshot = self.read_series_control_snapshot(series_id)?;
+        snapshot
+            .control_record_id
+            .ok_or_else(|| {
+                paperproof_sdk_rs::PaperProofError::invalid_input(
+                    "series_id",
+                    format!("series {series_id} does not expose a control_record_id"),
+                )
+            })
+    }
+
+    fn resolve_controller_nft_id(&self, series_id: &str) -> paperproof_sdk_rs::Result<String> {
+        let snapshot = self.read_series_control_snapshot(series_id)?;
+        snapshot
+            .controller_nft_id
+            .ok_or_else(|| {
+                paperproof_sdk_rs::PaperProofError::invalid_input(
+                    "series_id",
+                    format!("series {series_id} does not expose a controller_nft_id"),
+                )
+            })
+    }
+
+    fn read_series_control_snapshot(
+        &self,
+        series_id: &str,
+    ) -> paperproof_sdk_rs::Result<paperproof_sdk_rs::types::SeriesControlSnapshot> {
+        let read = PaperProofReadClient::new(
+            JsonRpcClient::new(self.client.deployment.rpc_url.clone()),
+            self.client.deployment.clone(),
+        );
+        tokio::runtime::Runtime::new()
+            .map_err(|err| {
+                paperproof_sdk_rs::PaperProofError::invalid_input(
+                    "runtime",
+                    format!("failed to start tokio runtime: {err}"),
+                )
+            })?
+            .block_on(read.get_series_control_snapshot(series_id))
     }
 
     fn run(

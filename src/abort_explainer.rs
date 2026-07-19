@@ -71,16 +71,16 @@ const ABORTS: &[AbortExplanation] = &[
     AbortExplanation {
         module: "comments",
         code: 8,
-        title: "Not the comments tree owner",
-        detail: "The signer is not authorized for legacy tree-owner control.",
-        suggestion: "For legacy trees, use the current tree owner account. For controller-managed series, use the bound controller NFT holder and controller-aware comments builders.",
+        title: "Not authorized for comments control",
+        detail: "The signer is not authorized for this comments-tree control action.",
+        suggestion: "Use the current controller-bound signer together with the standard comments builders and the latest control snapshot.",
     },
     AbortExplanation {
         module: "controller",
         code: 6,
-        title: "Legacy write path disabled",
-        detail: "This series no longer accepts legacy owner-only privileged writes.",
-        suggestion: "Use the controller-aware builder and the bound controlRecordId/controllerNftId inputs.",
+        title: "Series write path requires controller binding",
+        detail: "This series only accepts controller-bound privileged writes.",
+        suggestion: "Use the standard publishing builder with the latest controlRecordId/controllerNftId for the series.",
     },
     AbortExplanation {
         module: "controller",
@@ -101,7 +101,7 @@ const ABORTS: &[AbortExplanation] = &[
         code: 9,
         title: "Controller transfer locked",
         detail: "The control record is temporarily locked against controller-transfer-sensitive operations.",
-        suggestion: "Wait for the lock to clear or use the authorized sync/repair/promotion path first.",
+        suggestion: "Wait for the lock to clear, then retry with the latest control snapshot.",
     },
     AbortExplanation {
         module: "controller",
@@ -268,8 +268,8 @@ const ABORTS: &[AbortExplanation] = &[
         module: "publishing",
         code: 21,
         title: "Not series authority",
-        detail: "The signer is not authorized for this series write under the current authority mode.",
-        suggestion: "For legacy series, use the current owner account. For controller-managed series, use the bound controller NFT holder and controller-aware publishing builder.",
+        detail: "The signer is not authorized for this series write.",
+        suggestion: "Use the current controller-bound signer together with the standard publishing builder and the latest control snapshot.",
     },
     AbortExplanation {
         module: "publishing",

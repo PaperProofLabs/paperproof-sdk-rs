@@ -56,6 +56,8 @@ fn main() -> paperproof_sdk_rs::Result<()> {
 
         client.publishing.add_preprint_version(&AddVersionInput {
             series_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
             body: preprint,
         })?;
         built += 1;

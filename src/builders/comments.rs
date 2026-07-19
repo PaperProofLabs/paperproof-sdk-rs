@@ -8,8 +8,7 @@ use crate::{
     transaction::{MoveArgument as Arg, MoveCall, TransactionPlan},
     types::{
         AddBlobCommentInput, AddOnchainCommentInput, SetCommentStatusInput,
-        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
-        TransferTreeOwnerWithControllerInput,
+        SetTreeStatusInput, TransferTreeOwnerInput,
     },
     validation::{
         validate_address, validate_blob_comment, validate_comment_status, validate_object_id,
@@ -64,32 +63,7 @@ impl CommentsBuilder {
         }))
     }
 
-    pub fn set_tree_status(&self, tree_id: &str, status: u8) -> Result<TransactionPlan> {
-        validate_object_id(tree_id)?;
-        validate_tree_status(status)?;
-        Ok(TransactionPlan::single(MoveCall {
-            target: self.base.comments_target("set_tree_status"),
-            arguments: vec![Arg::Object(tree_id.to_string()), Arg::U8(status)],
-        }))
-    }
-
-    pub fn set_comment_status(&self, input: &SetCommentStatusInput) -> Result<TransactionPlan> {
-        validate_object_id(&input.tree_id)?;
-        validate_comment_status(input.status)?;
-        Ok(TransactionPlan::single(MoveCall {
-            target: self.base.comments_target("set_comment_status"),
-            arguments: vec![
-                Arg::Object(input.tree_id.clone()),
-                Arg::U64(input.comment_id),
-                Arg::U8(input.status),
-            ],
-        }))
-    }
-
-    pub fn set_tree_status_with_controller(
-        &self,
-        input: &SetTreeStatusWithControllerInput,
-    ) -> Result<TransactionPlan> {
+    pub fn set_tree_status(&self, input: &SetTreeStatusInput) -> Result<TransactionPlan> {
         validate_object_id(&input.tree_id)?;
         validate_object_id(&input.control_record_id)?;
         validate_object_id(&input.controller_nft_id)?;
@@ -106,10 +80,7 @@ impl CommentsBuilder {
         }))
     }
 
-    pub fn set_comment_status_with_controller(
-        &self,
-        input: &SetCommentStatusWithControllerInput,
-    ) -> Result<TransactionPlan> {
+    pub fn set_comment_status(&self, input: &SetCommentStatusInput) -> Result<TransactionPlan> {
         validate_object_id(&input.tree_id)?;
         validate_object_id(&input.control_record_id)?;
         validate_object_id(&input.controller_nft_id)?;
@@ -159,22 +130,7 @@ impl CommentsBuilder {
         }))
     }
 
-    pub fn transfer_tree_owner(&self, tree_id: &str, new_owner: &str) -> Result<TransactionPlan> {
-        validate_object_id(tree_id)?;
-        validate_address(new_owner)?;
-        Ok(TransactionPlan::single(MoveCall {
-            target: self.base.comments_target("transfer_tree_owner"),
-            arguments: vec![
-                Arg::Object(tree_id.to_string()),
-                Arg::Address(new_owner.to_string()),
-            ],
-        }))
-    }
-
-    pub fn transfer_tree_owner_with_controller(
-        &self,
-        input: &TransferTreeOwnerWithControllerInput,
-    ) -> Result<TransactionPlan> {
+    pub fn transfer_tree_owner(&self, input: &TransferTreeOwnerInput) -> Result<TransactionPlan> {
         validate_object_id(&input.tree_id)?;
         validate_object_id(&input.control_record_id)?;
         validate_object_id(&input.controller_nft_id)?;
@@ -190,4 +146,5 @@ impl CommentsBuilder {
             ],
         }))
     }
+
 }

@@ -364,13 +364,6 @@ pub fn view_artifact_control_record(object: &DecodedObject) -> ArtifactControlRe
         comments_tree_id: f.get("comments_tree_id").and_then(id_value),
         artifact_type: f.get("artifact_type").and_then(u8_value),
         controller_nft_id: f.get("controller_nft_id").and_then(id_value),
-        current_controller_mirror: f.get("current_controller_mirror").and_then(string_value),
-        legacy_series_owner_mirror: f
-            .get("legacy_series_owner_mirror")
-            .and_then(string_value),
-        legacy_comments_owner_mirror: f
-            .get("legacy_comments_owner_mirror")
-            .and_then(string_value),
         authority_mode,
         authority_mode_name: authority_mode_name(authority_mode),
         transfer_locked: f.get("transfer_locked").and_then(bool_value),

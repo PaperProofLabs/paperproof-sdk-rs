@@ -138,8 +138,8 @@ impl PaperProofReadClient {
             base.series_controller_nft_id = state.controller_nft_id;
         } else {
             base.series_control_enabled = Some(false);
-            base.series_authority_mode = Some(0);
-            base.series_authority_mode_name = views::authority_mode_name(Some(0));
+            base.series_authority_mode = None;
+            base.series_authority_mode_name = None;
             base.series_control_record_id = None;
             base.series_controller_nft_id = None;
         }
@@ -168,8 +168,8 @@ impl PaperProofReadClient {
             base.tree_controller_nft_id = state.controller_nft_id;
         } else {
             base.tree_control_enabled = Some(false);
-            base.tree_authority_mode = Some(0);
-            base.tree_authority_mode_name = views::authority_mode_name(Some(0));
+            base.tree_authority_mode = None;
+            base.tree_authority_mode_name = None;
             base.tree_control_record_id = None;
             base.tree_controller_nft_id = None;
         }
@@ -221,8 +221,8 @@ impl PaperProofReadClient {
         &self,
         control_record_id: Option<&str>,
         controller_nft_id: Option<&str>,
-        series_owner: Option<&str>,
-        tree_owner: Option<&str>,
+        _series_owner: Option<&str>,
+        _tree_owner: Option<&str>,
     ) -> Result<ControllerStateSnapshot> {
         let Some(control_record_id) = control_record_id else {
             return Ok(ControllerStateSnapshot {
@@ -232,11 +232,7 @@ impl PaperProofReadClient {
                 control_record_id: None,
                 controller_nft_id: controller_nft_id.map(ToString::to_string),
                 controller_holder: None,
-                current_controller_mirror: None,
-                legacy_series_owner_mirror: None,
-                legacy_comments_owner_mirror: None,
                 transfer_locked: None,
-                mirror_stale: Some(false),
             });
         };
         let Some(controller_nft_id) = controller_nft_id else {
@@ -247,32 +243,13 @@ impl PaperProofReadClient {
                 control_record_id: Some(control_record_id.to_string()),
                 controller_nft_id: None,
                 controller_holder: None,
-                current_controller_mirror: None,
-                legacy_series_owner_mirror: None,
-                legacy_comments_owner_mirror: None,
                 transfer_locked: None,
-                mirror_stale: Some(false),
             });
         };
         let record = self
             .get_artifact_control_record_view(control_record_id)
             .await?;
         let holder = self.get_controller_nft_holder(controller_nft_id).await?;
-        let controller_matches_mirror = holder
-            .as_deref()
-            .zip(record.current_controller_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
-        let series_owner_matches_mirror = series_owner
-            .zip(record.legacy_series_owner_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
-        let tree_owner_matches_mirror = tree_owner
-            .zip(record.legacy_comments_owner_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
-        let mirror_stale = Some(
-            controller_matches_mirror == Some(false)
-                || series_owner_matches_mirror == Some(false)
-                || tree_owner_matches_mirror == Some(false),
-        );
         Ok(ControllerStateSnapshot {
             control_enabled: true,
             authority_mode: record.authority_mode,
@@ -280,11 +257,7 @@ impl PaperProofReadClient {
             control_record_id: Some(control_record_id.to_string()),
             controller_nft_id: Some(controller_nft_id.to_string()),
             controller_holder: holder,
-            current_controller_mirror: record.current_controller_mirror.clone(),
-            legacy_series_owner_mirror: record.legacy_series_owner_mirror.clone(),
-            legacy_comments_owner_mirror: record.legacy_comments_owner_mirror.clone(),
             transfer_locked: record.transfer_locked,
-            mirror_stale,
         })
     }
 
@@ -369,21 +342,6 @@ impl PaperProofReadClient {
                 tree.as_ref().and_then(|item| item.owner.as_deref()),
             )
             .await?;
-        let controller_matches_mirror = snapshot
-            .controller_holder
-            .as_deref()
-            .zip(snapshot.current_controller_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
-        let series_owner_matches_mirror = series
-            .owner
-            .as_deref()
-            .zip(snapshot.legacy_series_owner_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
-        let tree_owner_matches_mirror = tree
-            .as_ref()
-            .and_then(|item| item.owner.as_deref())
-            .zip(snapshot.legacy_comments_owner_mirror.as_deref())
-            .map(|(left, right)| same_address(left, right));
         Ok(SeriesControlSnapshot {
             control_enabled: snapshot.control_enabled,
             series_id: series_id.to_string(),
@@ -393,16 +351,9 @@ impl PaperProofReadClient {
             control_record_id: snapshot.control_record_id,
             controller_nft_id: snapshot.controller_nft_id,
             controller_holder: snapshot.controller_holder,
-            current_controller_mirror: snapshot.current_controller_mirror,
-            legacy_series_owner_mirror: snapshot.legacy_series_owner_mirror,
-            legacy_comments_owner_mirror: snapshot.legacy_comments_owner_mirror,
             transfer_locked: snapshot.transfer_locked,
-            mirror_stale: snapshot.mirror_stale,
             series_owner: series.owner,
             tree_owner: tree.and_then(|item| item.owner),
-            controller_matches_mirror,
-            series_owner_matches_mirror,
-            tree_owner_matches_mirror,
         })
     }
 
@@ -587,8 +538,8 @@ where
             base.series_controller_nft_id = state.controller_nft_id;
         } else {
             base.series_control_enabled = Some(false);
-            base.series_authority_mode = Some(0);
-            base.series_authority_mode_name = views::authority_mode_name(Some(0));
+            base.series_authority_mode = None;
+            base.series_authority_mode_name = None;
         }
         Ok(base)
     }
@@ -615,8 +566,8 @@ where
             base.tree_controller_nft_id = state.controller_nft_id;
         } else {
             base.tree_control_enabled = Some(false);
-            base.tree_authority_mode = Some(0);
-            base.tree_authority_mode_name = views::authority_mode_name(Some(0));
+            base.tree_authority_mode = None;
+            base.tree_authority_mode_name = None;
         }
         Ok(base)
     }
@@ -738,10 +689,6 @@ fn owner_address_value(value: &Value) -> Option<String> {
         .or_else(|| owner.get("owner"))
         .and_then(Value::as_str)
         .and_then(normalize_address)
-}
-
-fn same_address(left: &str, right: &str) -> bool {
-    normalize_address(left) == normalize_address(right)
 }
 
 fn normalize_address(value: &str) -> Option<String> {

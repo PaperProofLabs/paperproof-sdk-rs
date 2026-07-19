@@ -118,12 +118,6 @@ pub struct GenericFileInput {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct AddVersionInput<T> {
     pub series_id: String,
-    pub body: T,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct AddVersionWithControllerInput<T> {
-    pub series_id: String,
     pub control_record_id: String,
     pub controller_nft_id: String,
     pub body: T,
@@ -172,36 +166,22 @@ pub struct AddBlobCommentInput {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct SetCommentStatusInput {
     pub tree_id: String,
+    pub control_record_id: String,
+    pub controller_nft_id: String,
     pub comment_id: u64,
     pub status: u8,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct SetTreeStatusWithControllerInput {
+pub struct SetTreeStatusInput {
     pub tree_id: String,
     pub control_record_id: String,
     pub controller_nft_id: String,
-    pub status: u8,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct SetCommentStatusWithControllerInput {
-    pub tree_id: String,
-    pub control_record_id: String,
-    pub controller_nft_id: String,
-    pub comment_id: u64,
     pub status: u8,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TransferArtifactOwnerInput {
-    pub series_id: String,
-    pub comments_tree_id: String,
-    pub new_owner: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct TransferArtifactOwnerWithControllerInput {
     pub series_id: String,
     pub comments_tree_id: String,
     pub control_record_id: String,
@@ -212,33 +192,13 @@ pub struct TransferArtifactOwnerWithControllerInput {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TransferTreeOwnerInput {
     pub tree_id: String,
-    pub new_owner: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct TransferTreeOwnerWithControllerInput {
-    pub tree_id: String,
     pub control_record_id: String,
     pub controller_nft_id: String,
     pub new_owner: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct PromoteExistingSeriesToDualModeInput {
-    pub series_id: String,
-    pub comments_tree_id: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct PromoteExistingSeriesControllerModeInput {
-    pub series_id: String,
-    pub comments_tree_id: String,
-    pub control_record_id: String,
-    pub controller_nft_id: String,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct UpdateSeriesMetadataWithControllerInput {
+pub struct UpdateSeriesMetadataInput {
     pub series_id: String,
     pub control_record_id: String,
     pub controller_nft_id: String,
@@ -246,7 +206,7 @@ pub struct UpdateSeriesMetadataWithControllerInput {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
-pub struct UpdateSeriesDescriptionWithControllerInput {
+pub struct UpdateSeriesDescriptionInput {
     pub series_id: String,
     pub control_record_id: String,
     pub controller_nft_id: String,
@@ -385,9 +345,6 @@ pub struct ArtifactControlRecordView {
     pub comments_tree_id: Option<String>,
     pub artifact_type: Option<u8>,
     pub controller_nft_id: Option<String>,
-    pub current_controller_mirror: Option<String>,
-    pub legacy_series_owner_mirror: Option<String>,
-    pub legacy_comments_owner_mirror: Option<String>,
     pub authority_mode: Option<u64>,
     pub authority_mode_name: Option<String>,
     pub transfer_locked: Option<bool>,
@@ -403,11 +360,7 @@ pub struct ControllerStateSnapshot {
     pub control_record_id: Option<String>,
     pub controller_nft_id: Option<String>,
     pub controller_holder: Option<String>,
-    pub current_controller_mirror: Option<String>,
-    pub legacy_series_owner_mirror: Option<String>,
-    pub legacy_comments_owner_mirror: Option<String>,
     pub transfer_locked: Option<bool>,
-    pub mirror_stale: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -420,16 +373,9 @@ pub struct SeriesControlSnapshot {
     pub control_record_id: Option<String>,
     pub controller_nft_id: Option<String>,
     pub controller_holder: Option<String>,
-    pub current_controller_mirror: Option<String>,
-    pub legacy_series_owner_mirror: Option<String>,
-    pub legacy_comments_owner_mirror: Option<String>,
     pub transfer_locked: Option<bool>,
-    pub mirror_stale: Option<bool>,
     pub series_owner: Option<String>,
     pub tree_owner: Option<String>,
-    pub controller_matches_mirror: Option<bool>,
-    pub series_owner_matches_mirror: Option<bool>,
-    pub tree_owner_matches_mirror: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

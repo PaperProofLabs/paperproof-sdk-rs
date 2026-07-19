@@ -10,13 +10,14 @@ use paperproof_sdk_rs::{
     governance,
     transaction::MoveArgument,
     types::{
-        AddOnchainCommentInput, AddVersionInput, AddVersionWithControllerInput,
-        CreateExecutableProposalInput, CreateSignalProposalInput,
-        PromoteExistingSeriesControllerModeInput, SetCommentStatusInput,
-        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
-        TransferArtifactOwnerWithControllerInput, TransferTreeOwnerWithControllerInput,
+        AddOnchainCommentInput, AddVersionInput, CreateExecutableProposalInput,
+        CreateSignalProposalInput, SetCommentStatusInput, SetTreeStatusInput,
+        TransferArtifactOwnerInput, TransferTreeOwnerInput,
     },
 };
+
+const CONTROL_RECORD_ID: &str = "0x5678";
+const CONTROLLER_NFT_ID: &str = "0x9abc";
 
 #[test]
 fn direct_publish_preprint_is_disabled() {
@@ -273,13 +274,15 @@ fn builds_add_software_release_version_call() {
         .publishing
         .add_software_release_version(&AddVersionInput {
             series_id: "0x1234".to_string(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_software_release(),
         })
         .unwrap();
     assert!(
         plan.calls[0]
             .target
-            .ends_with("::publishing::add_software_release_version")
+            .ends_with("::publishing::add_software_release_version_with_controller")
     );
     assert_eq!(
         plan.calls[0].arguments[2],
@@ -297,31 +300,26 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_preprint_version(&AddVersionInput {
             series_id: series.clone(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_preprint(),
         })
         .unwrap();
     assert_add_version_shape(
         &preprint.calls[0],
-        "add_preprint_version",
-        19,
+        "add_preprint_version_with_controller",
+        21,
         &[
-            (
-                5,
-                MoveArgument::String("A PaperProof Test Preprint".to_string()),
-            ),
-            (
-                6,
-                MoveArgument::String("A local SDK test record.".to_string()),
-            ),
-            (
-                7,
-                MoveArgument::StringVector(vec!["PaperProof Labs".to_string()]),
-            ),
-            (8, MoveArgument::StringVector(vec!["sdk".to_string()])),
-            (9, MoveArgument::String("computer science".to_string())),
-            (10, MoveArgument::String("CC-BY-4.0".to_string())),
-            (11, MoveArgument::U64(12)),
-            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("A PaperProof Test Preprint".to_string())),
+            (8, MoveArgument::String("A local SDK test record.".to_string())),
+            (9, MoveArgument::StringVector(vec!["PaperProof Labs".to_string()])),
+            (10, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (11, MoveArgument::String("computer science".to_string())),
+            (12, MoveArgument::String("CC-BY-4.0".to_string())),
+            (13, MoveArgument::U64(12)),
+            (20, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 
@@ -329,22 +327,23 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_blog_post_version(&AddVersionInput {
             series_id: series.clone(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_blog_post(),
         })
         .unwrap();
     assert_add_version_shape(
         &blog.calls[0],
-        "add_blog_post_version",
-        16,
+        "add_blog_post_version_with_controller",
+        18,
         &[
-            (5, MoveArgument::String("PaperProof SDK blog".to_string())),
-            (
-                6,
-                MoveArgument::String("A local SDK blog test.".to_string()),
-            ),
-            (7, MoveArgument::StringVector(vec!["sdk".to_string()])),
-            (8, MoveArgument::String("en".to_string())),
-            (15, MoveArgument::Object(deployment.objects.clock.clone())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("PaperProof SDK blog".to_string())),
+            (8, MoveArgument::String("A local SDK blog test.".to_string())),
+            (9, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (10, MoveArgument::String("en".to_string())),
+            (17, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 
@@ -352,28 +351,26 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_technical_report_version(&AddVersionInput {
             series_id: series.clone(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_technical_report(),
         })
         .unwrap();
     assert_add_version_shape(
         &report.calls[0],
-        "add_technical_report_version",
-        19,
+        "add_technical_report_version_with_controller",
+        21,
         &[
-            (5, MoveArgument::String("PaperProof SDK report".to_string())),
-            (
-                6,
-                MoveArgument::String("A local SDK technical report test.".to_string()),
-            ),
-            (
-                7,
-                MoveArgument::StringVector(vec!["PaperProof Labs".to_string()]),
-            ),
-            (8, MoveArgument::String("PaperProof Labs".to_string())),
-            (9, MoveArgument::String("PPRF-RS-001".to_string())),
-            (10, MoveArgument::StringVector(vec!["sdk".to_string()])),
-            (11, MoveArgument::String("CC-BY-4.0".to_string())),
-            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("PaperProof SDK report".to_string())),
+            (8, MoveArgument::String("A local SDK technical report test.".to_string())),
+            (9, MoveArgument::StringVector(vec!["PaperProof Labs".to_string()])),
+            (10, MoveArgument::String("PaperProof Labs".to_string())),
+            (11, MoveArgument::String("PPRF-RS-001".to_string())),
+            (12, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (13, MoveArgument::String("CC-BY-4.0".to_string())),
+            (20, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 
@@ -381,28 +378,26 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_dataset_version(&AddVersionInput {
             series_id: series.clone(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_dataset(),
         })
         .unwrap();
     assert_add_version_shape(
         &dataset.calls[0],
-        "add_dataset_version",
-        19,
+        "add_dataset_version_with_controller",
+        21,
         &[
-            (
-                5,
-                MoveArgument::String("PaperProof SDK dataset".to_string()),
-            ),
-            (
-                6,
-                MoveArgument::String("A local SDK dataset test.".to_string()),
-            ),
-            (7, MoveArgument::String("csv".to_string())),
-            (8, MoveArgument::U64(1)),
-            (9, MoveArgument::U64(128)),
-            (10, MoveArgument::String("CC-BY-4.0".to_string())),
-            (11, MoveArgument::StringVector(vec!["sdk".to_string()])),
-            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("PaperProof SDK dataset".to_string())),
+            (8, MoveArgument::String("A local SDK dataset test.".to_string())),
+            (9, MoveArgument::String("csv".to_string())),
+            (10, MoveArgument::U64(1)),
+            (11, MoveArgument::U64(128)),
+            (12, MoveArgument::String("CC-BY-4.0".to_string())),
+            (13, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (20, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 
@@ -410,27 +405,31 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_software_release_version(&AddVersionInput {
             series_id: series.clone(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_software_release(),
         })
         .unwrap();
     assert_add_version_shape(
         &software.calls[0],
-        "add_software_release_version",
-        19,
+        "add_software_release_version_with_controller",
+        21,
         &[
-            (5, MoveArgument::String("paperproof-sdk-rs".to_string())),
-            (6, MoveArgument::String("0.1.0".to_string())),
-            (7, MoveArgument::String("sha256:source".to_string())),
-            (8, MoveArgument::String("sha256:package".to_string())),
-            (9, MoveArgument::String("Initial test release".to_string())),
-            (10, MoveArgument::String("Apache-2.0".to_string())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("paperproof-sdk-rs".to_string())),
+            (8, MoveArgument::String("0.1.0".to_string())),
+            (9, MoveArgument::String("sha256:source".to_string())),
+            (10, MoveArgument::String("sha256:package".to_string())),
+            (11, MoveArgument::String("Initial test release".to_string())),
+            (12, MoveArgument::String("Apache-2.0".to_string())),
             (
-                11,
+                13,
                 MoveArgument::String(
                     "https://github.com/PaperProofLabs/paperproof-sdk-rs".to_string(),
                 ),
             ),
-            (18, MoveArgument::Object(deployment.objects.clock.clone())),
+            (20, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 
@@ -438,23 +437,24 @@ fn builds_all_add_version_calls() {
         .publishing
         .add_generic_file_version(&AddVersionInput {
             series_id: series,
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             body: common::sample_generic_file(),
         })
         .unwrap();
     assert_add_version_shape(
         &generic.calls[0],
-        "add_generic_file_version",
-        17,
+        "add_generic_file_version_with_controller",
+        19,
         &[
-            (5, MoveArgument::String("PaperProof SDK file".to_string())),
-            (
-                6,
-                MoveArgument::String("A local SDK generic file test.".to_string()),
-            ),
-            (7, MoveArgument::String("paperproof-sdk-rs.txt".to_string())),
-            (8, MoveArgument::U64(128)),
-            (9, MoveArgument::String("Apache-2.0".to_string())),
-            (16, MoveArgument::Object(deployment.objects.clock.clone())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+            (7, MoveArgument::String("PaperProof SDK file".to_string())),
+            (8, MoveArgument::String("A local SDK generic file test.".to_string())),
+            (9, MoveArgument::String("paperproof-sdk-rs.txt".to_string())),
+            (10, MoveArgument::U64(128)),
+            (11, MoveArgument::String("Apache-2.0".to_string())),
+            (18, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 }
@@ -466,7 +466,7 @@ fn controller_add_version_requires_version_change_note() {
     body.version_change_note = None;
     let error = client
         .publishing
-        .add_blog_post_version_with_controller(&AddVersionWithControllerInput {
+        .add_blog_post_version(&AddVersionInput {
             series_id: "0x1234".to_string(),
             control_record_id: "0x5678".to_string(),
             controller_nft_id: "0x9abc".to_string(),
@@ -484,7 +484,7 @@ fn controller_builders_match_current_contract_abi() {
 
     let blog = client
         .publishing
-        .add_blog_post_version_with_controller(&AddVersionWithControllerInput {
+        .add_blog_post_version(&AddVersionInput {
             series_id: "0x1234".to_string(),
             control_record_id: "0x5678".to_string(),
             controller_nft_id: "0x9abc".to_string(),
@@ -531,7 +531,7 @@ fn controller_builders_match_current_contract_abi() {
 
     let transfer_owner = client
         .publishing
-        .transfer_artifact_owner_with_controller(&TransferArtifactOwnerWithControllerInput {
+        .transfer_artifact_owner(&TransferArtifactOwnerInput {
             series_id: "0x1234".to_string(),
             comments_tree_id: "0x2222".to_string(),
             control_record_id: "0x5678".to_string(),
@@ -558,30 +558,6 @@ fn controller_builders_match_current_contract_abi() {
                 ),
             ),
             (5, MoveArgument::Object(deployment.objects.clock.clone())),
-        ],
-    );
-
-    let promote = client
-        .publishing
-        .promote_existing_series_to_controller_primary(
-            &PromoteExistingSeriesControllerModeInput {
-                series_id: "0x1234".to_string(),
-                comments_tree_id: "0x2222".to_string(),
-                control_record_id: "0x5678".to_string(),
-                controller_nft_id: "0x9abc".to_string(),
-            },
-        )
-        .unwrap();
-    assert_call_shape(
-        &promote.calls[0],
-        "promote_existing_series_to_controller_primary",
-        5,
-        &[
-            (0, MoveArgument::Object("0x1234".to_string())),
-            (1, MoveArgument::Object("0x2222".to_string())),
-            (2, MoveArgument::Object("0x5678".to_string())),
-            (3, MoveArgument::Object("0x9abc".to_string())),
-            (4, MoveArgument::Object(deployment.objects.clock.clone())),
         ],
     );
 }
@@ -682,21 +658,28 @@ fn builds_comment_and_status_calls() {
         .comments
         .set_comment_status(&SetCommentStatusInput {
             tree_id: "0x1234".to_string(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
             comment_id: 1,
             status: comment_status::HIDDEN,
         })
         .unwrap();
     assert_eq!(
-        status.calls[0].arguments[2],
+        status.calls[0].arguments[4],
         MoveArgument::U8(comment_status::HIDDEN)
     );
 
     let tree = client
         .comments
-        .set_tree_status("0x1234", tree_status::LOCKED)
+        .set_tree_status(&SetTreeStatusInput {
+            tree_id: "0x1234".to_string(),
+            control_record_id: CONTROL_RECORD_ID.to_string(),
+            controller_nft_id: CONTROLLER_NFT_ID.to_string(),
+            status: tree_status::LOCKED,
+        })
         .unwrap();
     assert_eq!(
-        tree.calls[0].arguments[1],
+        tree.calls[0].arguments[3],
         MoveArgument::U8(tree_status::LOCKED)
     );
 }
@@ -708,7 +691,7 @@ fn controller_comment_builders_match_current_contract_abi() {
 
     let tree = client
         .comments
-        .set_tree_status_with_controller(&SetTreeStatusWithControllerInput {
+        .set_tree_status(&SetTreeStatusInput {
             tree_id: "0x1234".to_string(),
             control_record_id: "0x5678".to_string(),
             controller_nft_id: "0x9abc".to_string(),
@@ -730,7 +713,7 @@ fn controller_comment_builders_match_current_contract_abi() {
 
     let comment = client
         .comments
-        .set_comment_status_with_controller(&SetCommentStatusWithControllerInput {
+        .set_comment_status(&SetCommentStatusInput {
             tree_id: "0x1234".to_string(),
             control_record_id: "0x5678".to_string(),
             controller_nft_id: "0x9abc".to_string(),
@@ -754,7 +737,7 @@ fn controller_comment_builders_match_current_contract_abi() {
 
     let transfer = client
         .comments
-        .transfer_tree_owner_with_controller(&TransferTreeOwnerWithControllerInput {
+        .transfer_tree_owner(&TransferTreeOwnerInput {
             tree_id: "0x1234".to_string(),
             control_record_id: "0x5678".to_string(),
             controller_nft_id: "0x9abc".to_string(),
@@ -824,7 +807,11 @@ fn assert_add_version_shape(
         call,
         function,
         argument_count,
-        &[(2, MoveArgument::Object("0x1234".to_string()))],
+        &[
+            (2, MoveArgument::Object("0x1234".to_string())),
+            (3, MoveArgument::Object(CONTROL_RECORD_ID.to_string())),
+            (4, MoveArgument::Object(CONTROLLER_NFT_ID.to_string())),
+        ],
     );
     assert_call_shape(call, function, argument_count, expected_arguments);
 }

@@ -49,6 +49,7 @@ fn parses_contracts_repository_manifest_shape() {
                 "governanceOriginal": current.packages.governance_original,
                 "governance": current.packages.governance,
                 "comments": current.packages.comments,
+                "publishingOriginal": current.packages.publishing_original,
                 "publishing": current.packages.publishing,
                 "sharedController": current.packages.controller
             },
@@ -67,7 +68,11 @@ fn parses_contracts_repository_manifest_shape() {
             }
         },
         "packageHistory": {
-            "governance": [current.packages.governance_original, current.packages.governance]
+            "pprf": current.package_history.pprf,
+            "governance": current.package_history.governance,
+            "comments": current.package_history.comments,
+            "publishing": current.package_history.publishing,
+            "sharedController": current.package_history.controller
         },
         "updatedAt": "2026-05-08T00:00:00+08:00",
         "minSdkVersion": "0.1.0"

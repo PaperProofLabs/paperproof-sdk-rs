@@ -14,15 +14,11 @@ use crate::{
     read::PaperProofReadClient,
     transaction::TransactionPlan,
     types::{
-        AddBlobCommentInput, AddOnchainCommentInput, AddVersionInput,
-        AddVersionWithControllerInput, BlogPostInput, CreateExecutableProposalInput,
-        CreateSignalProposalInput, DatasetInput, GenericFileInput, MetadataAttribute,
-        PreprintInput, PromoteExistingSeriesControllerModeInput,
-        PromoteExistingSeriesToDualModeInput, SetCommentStatusInput,
-        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
+        AddBlobCommentInput, AddOnchainCommentInput, AddVersionInput, BlogPostInput,
+        CreateExecutableProposalInput, CreateSignalProposalInput, DatasetInput,
+        GenericFileInput, PreprintInput, SetCommentStatusInput, SetTreeStatusInput,
         SoftwareReleaseInput, TechnicalReportInput, TransferArtifactOwnerInput,
-        TransferArtifactOwnerWithControllerInput, TransferTreeOwnerWithControllerInput,
-        UpdateSeriesDescriptionWithControllerInput, UpdateSeriesMetadataWithControllerInput,
+        TransferTreeOwnerInput, UpdateSeriesDescriptionInput, UpdateSeriesMetadataInput,
         VoteInput,
     },
 };
@@ -211,20 +207,6 @@ impl PaperProofService {
         )
     }
 
-    pub fn add_blog_post_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<BlogPostInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_blog_post_version_with_controller(input)?,
-            "add blog post version with controller",
-            options,
-        )
-    }
-
     pub fn add_technical_report_version(
         &self,
         input: &AddVersionInput<TechnicalReportInput>,
@@ -233,20 +215,6 @@ impl PaperProofService {
         self.execute_add_version(
             self.client.publishing.add_technical_report_version(input)?,
             "add technical report version",
-            options,
-        )
-    }
-
-    pub fn add_technical_report_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<TechnicalReportInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_technical_report_version_with_controller(input)?,
-            "add technical report version with controller",
             options,
         )
     }
@@ -263,20 +231,6 @@ impl PaperProofService {
         )
     }
 
-    pub fn add_dataset_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<DatasetInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_dataset_version_with_controller(input)?,
-            "add dataset version with controller",
-            options,
-        )
-    }
-
     pub fn add_software_release_version(
         &self,
         input: &AddVersionInput<SoftwareReleaseInput>,
@@ -289,20 +243,6 @@ impl PaperProofService {
         )
     }
 
-    pub fn add_software_release_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<SoftwareReleaseInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_software_release_version_with_controller(input)?,
-            "add software release version with controller",
-            options,
-        )
-    }
-
     pub fn add_generic_file_version(
         &self,
         input: &AddVersionInput<GenericFileInput>,
@@ -311,34 +251,6 @@ impl PaperProofService {
         self.execute_add_version(
             self.client.publishing.add_generic_file_version(input)?,
             "add generic file version",
-            options,
-        )
-    }
-
-    pub fn add_generic_file_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<GenericFileInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_generic_file_version_with_controller(input)?,
-            "add generic file version with controller",
-            options,
-        )
-    }
-
-    pub fn add_preprint_version_with_controller(
-        &self,
-        input: &AddVersionWithControllerInput<PreprintInput>,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<ExecutedResult<AddVersionResult>> {
-        self.execute_add_version(
-            self.client
-                .publishing
-                .add_preprint_version_with_controller(input)?,
-            "add preprint version with controller",
             options,
         )
     }
@@ -367,14 +279,10 @@ impl PaperProofService {
 
     pub fn set_tree_status(
         &self,
-        tree_id: &str,
-        status: u8,
+        input: &SetTreeStatusInput,
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self.client.comments.set_tree_status(tree_id, status)?,
-            options,
-        )
+        self.execute_plan(&self.client.comments.set_tree_status(input)?, options)
     }
 
     pub fn set_comment_status(
@@ -383,28 +291,6 @@ impl PaperProofService {
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
         self.execute_plan(&self.client.comments.set_comment_status(input)?, options)
-    }
-
-    pub fn set_tree_status_with_controller(
-        &self,
-        input: &SetTreeStatusWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self.client.comments.set_tree_status_with_controller(input)?,
-            options,
-        )
-    }
-
-    pub fn set_comment_status_with_controller(
-        &self,
-        input: &SetCommentStatusWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self.client.comments.set_comment_status_with_controller(input)?,
-            options,
-        )
     }
 
     pub fn like_paper(
@@ -443,58 +329,19 @@ impl PaperProofService {
 
     pub fn update_series_metadata(
         &self,
-        series_id: &str,
-        metadata: Vec<MetadataAttribute>,
+        input: &UpdateSeriesMetadataInput,
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_metadata(series_id, metadata)?,
-            options,
-        )
-    }
-
-    pub fn update_series_metadata_with_controller(
-        &self,
-        input: &UpdateSeriesMetadataWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_metadata_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.publishing.update_series_metadata(input)?, options)
     }
 
     pub fn update_series_description(
         &self,
-        series_id: &str,
-        description: &str,
+        input: &UpdateSeriesDescriptionInput,
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
         self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_description(series_id, description)?,
-            options,
-        )
-    }
-
-    pub fn update_series_description_with_controller(
-        &self,
-        input: &UpdateSeriesDescriptionWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_description_with_controller(input)?,
+            &self.client.publishing.update_series_description(input)?,
             options,
         )
     }
@@ -510,117 +357,12 @@ impl PaperProofService {
         )
     }
 
-    pub fn transfer_artifact_owner_with_controller(
-        &self,
-        input: &TransferArtifactOwnerWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .transfer_artifact_owner_with_controller(input)?,
-            options,
-        )
-    }
-
     pub fn transfer_tree_owner(
         &self,
-        tree_id: &str,
-        new_owner: &str,
+        input: &TransferTreeOwnerInput,
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .comments
-                .transfer_tree_owner(tree_id, new_owner)?,
-            options,
-        )
-    }
-
-    pub fn transfer_tree_owner_with_controller(
-        &self,
-        input: &TransferTreeOwnerWithControllerInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .comments
-                .transfer_tree_owner_with_controller(input)?,
-            options,
-        )
-    }
-
-    pub fn promote_existing_series_to_dual_mode(
-        &self,
-        input: &PromoteExistingSeriesToDualModeInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_dual_mode(input)?,
-            options,
-        )
-    }
-
-    pub fn promote_existing_series_to_controller_primary(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_controller_primary(input)?,
-            options,
-        )
-    }
-
-    pub fn promote_existing_series_to_controller_only(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_controller_only(input)?,
-            options,
-        )
-    }
-
-    pub fn sync_existing_series_control_mirrors(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .sync_existing_series_control_mirrors(input)?,
-            options,
-        )
-    }
-
-    pub fn repair_existing_series_control_mirrors(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&CliExecutionOptions>,
-    ) -> Result<CliExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .repair_existing_series_control_mirrors(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.comments.transfer_tree_owner(input)?, options)
     }
 
     pub fn create_proposal(
@@ -814,85 +556,73 @@ where
         .await
     }
 
-    pub async fn add_preprint_version_with_controller(
+    pub async fn add_preprint_version(
         &self,
-        input: &AddVersionWithControllerInput<PreprintInput>,
+        input: &AddVersionInput<PreprintInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_preprint_version_with_controller(input)?,
+            self.client.publishing.add_preprint_version(input)?,
             options,
         )
         .await
     }
 
-    pub async fn add_blog_post_version_with_controller(
+    pub async fn add_blog_post_version(
         &self,
-        input: &AddVersionWithControllerInput<BlogPostInput>,
+        input: &AddVersionInput<BlogPostInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_blog_post_version_with_controller(input)?,
+            self.client.publishing.add_blog_post_version(input)?,
             options,
         )
         .await
     }
 
-    pub async fn add_technical_report_version_with_controller(
+    pub async fn add_technical_report_version(
         &self,
-        input: &AddVersionWithControllerInput<TechnicalReportInput>,
+        input: &AddVersionInput<TechnicalReportInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_technical_report_version_with_controller(input)?,
+            self.client.publishing.add_technical_report_version(input)?,
             options,
         )
         .await
     }
 
-    pub async fn add_dataset_version_with_controller(
+    pub async fn add_dataset_version(
         &self,
-        input: &AddVersionWithControllerInput<DatasetInput>,
+        input: &AddVersionInput<DatasetInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_dataset_version_with_controller(input)?,
+            self.client.publishing.add_dataset_version(input)?,
             options,
         )
         .await
     }
 
-    pub async fn add_software_release_version_with_controller(
+    pub async fn add_software_release_version(
         &self,
-        input: &AddVersionWithControllerInput<SoftwareReleaseInput>,
+        input: &AddVersionInput<SoftwareReleaseInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_software_release_version_with_controller(input)?,
+            self.client.publishing.add_software_release_version(input)?,
             options,
         )
         .await
     }
 
-    pub async fn add_generic_file_version_with_controller(
+    pub async fn add_generic_file_version(
         &self,
-        input: &AddVersionWithControllerInput<GenericFileInput>,
+        input: &AddVersionInput<GenericFileInput>,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutedResult<AddVersionResult>> {
         self.execute_add_version(
-            self.client
-                .publishing
-                .add_generic_file_version_with_controller(input)?,
+            self.client.publishing.add_generic_file_version(input)?,
             options,
         )
         .await
@@ -924,162 +654,57 @@ where
         Ok(ProviderExecutedResult { execution, result })
     }
 
-    pub async fn set_tree_status_with_controller(
+    pub async fn set_tree_status(
         &self,
-        input: &SetTreeStatusWithControllerInput,
+        input: &SetTreeStatusInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self.client.comments.set_tree_status_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.comments.set_tree_status(input)?, options)
         .await
     }
 
-    pub async fn set_comment_status_with_controller(
+    pub async fn set_comment_status(
         &self,
-        input: &SetCommentStatusWithControllerInput,
+        input: &SetCommentStatusInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self.client.comments.set_comment_status_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.comments.set_comment_status(input)?, options)
         .await
     }
 
-    pub async fn transfer_artifact_owner_with_controller(
+    pub async fn transfer_artifact_owner(
         &self,
-        input: &TransferArtifactOwnerWithControllerInput,
+        input: &TransferArtifactOwnerInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .transfer_artifact_owner_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.publishing.transfer_artifact_owner(input)?, options)
         .await
     }
 
-    pub async fn transfer_tree_owner_with_controller(
+    pub async fn transfer_tree_owner(
         &self,
-        input: &TransferTreeOwnerWithControllerInput,
+        input: &TransferTreeOwnerInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .comments
-                .transfer_tree_owner_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.comments.transfer_tree_owner(input)?, options)
         .await
     }
 
-    pub async fn update_series_metadata_with_controller(
+    pub async fn update_series_metadata(
         &self,
-        input: &UpdateSeriesMetadataWithControllerInput,
+        input: &UpdateSeriesMetadataInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_metadata_with_controller(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.publishing.update_series_metadata(input)?, options)
         .await
     }
 
-    pub async fn update_series_description_with_controller(
+    pub async fn update_series_description(
         &self,
-        input: &UpdateSeriesDescriptionWithControllerInput,
+        input: &UpdateSeriesDescriptionInput,
         options: Option<&ProviderExecutionOptions>,
     ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .update_series_description_with_controller(input)?,
-            options,
-        )
-        .await
-    }
-
-    pub async fn promote_existing_series_to_dual_mode(
-        &self,
-        input: &PromoteExistingSeriesToDualModeInput,
-        options: Option<&ProviderExecutionOptions>,
-    ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_dual_mode(input)?,
-            options,
-        )
-        .await
-    }
-
-    pub async fn promote_existing_series_to_controller_primary(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&ProviderExecutionOptions>,
-    ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_controller_primary(input)?,
-            options,
-        )
-        .await
-    }
-
-    pub async fn promote_existing_series_to_controller_only(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&ProviderExecutionOptions>,
-    ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .promote_existing_series_to_controller_only(input)?,
-            options,
-        )
-        .await
-    }
-
-    pub async fn sync_existing_series_control_mirrors(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&ProviderExecutionOptions>,
-    ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .sync_existing_series_control_mirrors(input)?,
-            options,
-        )
-        .await
-    }
-
-    pub async fn repair_existing_series_control_mirrors(
-        &self,
-        input: &PromoteExistingSeriesControllerModeInput,
-        options: Option<&ProviderExecutionOptions>,
-    ) -> Result<ProviderExecutionOutput> {
-        self.execute_plan(
-            &self
-                .client
-                .publishing
-                .repair_existing_series_control_mirrors(input)?,
-            options,
-        )
+        self.execute_plan(&self.client.publishing.update_series_description(input)?, options)
         .await
     }
 

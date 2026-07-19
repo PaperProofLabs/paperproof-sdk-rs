@@ -74,7 +74,12 @@ fn renders_empty_metadata_vector() {
     let executor = SuiCliExecutor::mainnet();
     let plan = client
         .publishing
-        .update_series_metadata("0x1234", Vec::<MetadataAttribute>::new())
+        .update_series_metadata(&paperproof_sdk_rs::types::UpdateSeriesMetadataInput {
+            series_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            metadata: Vec::<MetadataAttribute>::new(),
+        })
         .unwrap();
     let args = executor
         .to_cli_args(&plan, &CliExecutionOptions::default())

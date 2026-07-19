@@ -204,6 +204,11 @@ fn content_format_matrix_drives_all_publish_and_add_version_abi() {
         .publishing
         .add_blog_post_version(&paperproof_sdk_rs::types::AddVersionInput {
             series_id: SERIES_ID.to_string(),
+            control_record_id: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .to_string(),
+            controller_nft_id:
+                "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                    .to_string(),
             body: BlogPostInput {
                 title: "Plain Text Blog".to_string(),
                 summary: "Plain text".to_string(),
@@ -218,8 +223,8 @@ fn content_format_matrix_drives_all_publish_and_add_version_abi() {
             },
         })
         .unwrap();
-    assert_eq!(plain_blog.calls[0].arguments.len(), 16);
-    assert_eq!(string_arg(&plain_blog.calls[0], 12), "text/plain");
+    assert_eq!(plain_blog.calls[0].arguments.len(), 18);
+    assert_eq!(string_arg(&plain_blog.calls[0], 14), "text/plain");
 
     let technical_report = sdk
         .publishing

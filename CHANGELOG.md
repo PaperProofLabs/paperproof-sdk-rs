@@ -2,6 +2,18 @@
 
 All notable changes to the PaperProof Rust SDK are documented here.
 
+## 0.3.0
+
+### Changed
+
+- Finalized the controller-NFT / controller-only contract surface in the Rust
+  SDK so normal integration paths no longer depend on legacy or dual-mode
+  series behavior.
+- Updated publishing, comments, reads, deployment metadata, and typed views to
+  align with the upgraded PaperProof mainnet contract model.
+- Refreshed tests and examples for post-upgrade controller ownership flows and
+  prepared the crate for the coordinated NFT-upgrade release.
+
 ## 0.2.3 - 2026-05-12
 
 ### Added
