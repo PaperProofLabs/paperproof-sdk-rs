@@ -25,6 +25,8 @@ fn main() -> paperproof_sdk_rs::Result<()> {
                 walrus_blob_object_id: "0x6".to_string(),
                 content_type: "application/pdf".to_string(),
             },
+            series_description: Some("Example preprint series".to_string()),
+            version_change_note: Some("Initial example version".to_string()),
             series_metadata: vec![],
             version_metadata: vec![],
             payment_coin_id: None,

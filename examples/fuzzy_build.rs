@@ -34,6 +34,8 @@ fn main() -> paperproof_sdk_rs::Result<()> {
                 walrus_blob_object_id: "0x6".to_string(),
                 content_type: "text/plain".to_string(),
             },
+            series_description: Some(format!("Fuzzy local build series {index}")),
+            version_change_note: Some(format!("Fuzzy initial version {index}")),
             series_metadata: vec![MetadataAttribute {
                 key: "fuzz".to_string(),
                 value: index.to_string(),

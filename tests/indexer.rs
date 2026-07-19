@@ -3,7 +3,7 @@
 
 use async_trait::async_trait;
 use paperproof_sdk_rs::{
-    deployment::mainnet_deployment,
+    deployment::{DeploymentPackageFamily, deployment_package_ids, mainnet_deployment},
     error::Result,
     events::{PaperProofEventKind, SuiEventEnvelope},
     indexer::{
@@ -154,7 +154,12 @@ fn indexer_state_reduces_core_activity_counts() {
 fn canonical_module_filters_cover_core_event_packages() {
     let deployment = mainnet_deployment();
     let filters = PaperProofIndexerClient::canonical_module_filters(&deployment);
-    assert_eq!(filters.len(), 3);
+    assert_eq!(
+        filters.len(),
+        deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing).len()
+            + deployment_package_ids(&deployment, DeploymentPackageFamily::Comments).len()
+            + deployment_package_ids(&deployment, DeploymentPackageFamily::Governance).len()
+    );
     assert!(filters.iter().any(|filter| filter.module == "publishing"));
     assert!(filters.iter().any(|filter| filter.module == "comments"));
     assert!(

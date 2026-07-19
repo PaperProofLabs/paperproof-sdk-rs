@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    deployment::Deployment,
+    deployment::{Deployment, DeploymentPackageFamily, deployment_package_ids},
     error::{PaperProofError, Result},
     events::{SuiEventEnvelope, event_struct_name},
 };
@@ -296,13 +296,13 @@ fn field_as_str<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
 
 fn package_trusted(event: &SuiEventEnvelope, deployment: &Deployment) -> bool {
     [
-        &deployment.packages.publishing,
-        &deployment.packages.comments,
-        &deployment.packages.governance,
-        &deployment.packages.governance_original,
+        deployment_package_ids(deployment, DeploymentPackageFamily::Publishing),
+        deployment_package_ids(deployment, DeploymentPackageFamily::Comments),
+        deployment_package_ids(deployment, DeploymentPackageFamily::Governance),
     ]
-    .iter()
-    .any(|package| same_id(&event.package_id, package))
+    .into_iter()
+    .flatten()
+    .any(|package| same_id(&event.package_id, &package))
 }
 
 fn require_fields(value: &Value, fields: &[&str], reason: &str) -> EventTrustResult {

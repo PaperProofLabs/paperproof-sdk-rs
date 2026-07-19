@@ -14,10 +14,16 @@ use crate::{
     read::PaperProofReadClient,
     transaction::TransactionPlan,
     types::{
-        AddBlobCommentInput, AddOnchainCommentInput, AddVersionInput, BlogPostInput,
-        CreateExecutableProposalInput, CreateSignalProposalInput, DatasetInput, GenericFileInput,
-        MetadataAttribute, PreprintInput, SetCommentStatusInput, SoftwareReleaseInput,
-        TechnicalReportInput, TransferArtifactOwnerInput, VoteInput,
+        AddBlobCommentInput, AddOnchainCommentInput, AddVersionInput,
+        AddVersionWithControllerInput, BlogPostInput, CreateExecutableProposalInput,
+        CreateSignalProposalInput, DatasetInput, GenericFileInput, MetadataAttribute,
+        PreprintInput, PromoteExistingSeriesControllerModeInput,
+        PromoteExistingSeriesToDualModeInput, SetCommentStatusInput,
+        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
+        SoftwareReleaseInput, TechnicalReportInput, TransferArtifactOwnerInput,
+        TransferArtifactOwnerWithControllerInput, TransferTreeOwnerWithControllerInput,
+        UpdateSeriesDescriptionWithControllerInput, UpdateSeriesMetadataWithControllerInput,
+        VoteInput,
     },
 };
 
@@ -205,6 +211,20 @@ impl PaperProofService {
         )
     }
 
+    pub fn add_blog_post_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<BlogPostInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_blog_post_version_with_controller(input)?,
+            "add blog post version with controller",
+            options,
+        )
+    }
+
     pub fn add_technical_report_version(
         &self,
         input: &AddVersionInput<TechnicalReportInput>,
@@ -213,6 +233,20 @@ impl PaperProofService {
         self.execute_add_version(
             self.client.publishing.add_technical_report_version(input)?,
             "add technical report version",
+            options,
+        )
+    }
+
+    pub fn add_technical_report_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<TechnicalReportInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_technical_report_version_with_controller(input)?,
+            "add technical report version with controller",
             options,
         )
     }
@@ -229,6 +263,20 @@ impl PaperProofService {
         )
     }
 
+    pub fn add_dataset_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<DatasetInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_dataset_version_with_controller(input)?,
+            "add dataset version with controller",
+            options,
+        )
+    }
+
     pub fn add_software_release_version(
         &self,
         input: &AddVersionInput<SoftwareReleaseInput>,
@@ -241,6 +289,20 @@ impl PaperProofService {
         )
     }
 
+    pub fn add_software_release_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<SoftwareReleaseInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_software_release_version_with_controller(input)?,
+            "add software release version with controller",
+            options,
+        )
+    }
+
     pub fn add_generic_file_version(
         &self,
         input: &AddVersionInput<GenericFileInput>,
@@ -249,6 +311,34 @@ impl PaperProofService {
         self.execute_add_version(
             self.client.publishing.add_generic_file_version(input)?,
             "add generic file version",
+            options,
+        )
+    }
+
+    pub fn add_generic_file_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<GenericFileInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_generic_file_version_with_controller(input)?,
+            "add generic file version with controller",
+            options,
+        )
+    }
+
+    pub fn add_preprint_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<PreprintInput>,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<ExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_preprint_version_with_controller(input)?,
+            "add preprint version with controller",
             options,
         )
     }
@@ -293,6 +383,28 @@ impl PaperProofService {
         options: Option<&CliExecutionOptions>,
     ) -> Result<CliExecutionOutput> {
         self.execute_plan(&self.client.comments.set_comment_status(input)?, options)
+    }
+
+    pub fn set_tree_status_with_controller(
+        &self,
+        input: &SetTreeStatusWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self.client.comments.set_tree_status_with_controller(input)?,
+            options,
+        )
+    }
+
+    pub fn set_comment_status_with_controller(
+        &self,
+        input: &SetCommentStatusWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self.client.comments.set_comment_status_with_controller(input)?,
+            options,
+        )
     }
 
     pub fn like_paper(
@@ -344,6 +456,49 @@ impl PaperProofService {
         )
     }
 
+    pub fn update_series_metadata_with_controller(
+        &self,
+        input: &UpdateSeriesMetadataWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .update_series_metadata_with_controller(input)?,
+            options,
+        )
+    }
+
+    pub fn update_series_description(
+        &self,
+        series_id: &str,
+        description: &str,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .update_series_description(series_id, description)?,
+            options,
+        )
+    }
+
+    pub fn update_series_description_with_controller(
+        &self,
+        input: &UpdateSeriesDescriptionWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .update_series_description_with_controller(input)?,
+            options,
+        )
+    }
+
     pub fn transfer_artifact_owner(
         &self,
         input: &TransferArtifactOwnerInput,
@@ -351,6 +506,20 @@ impl PaperProofService {
     ) -> Result<CliExecutionOutput> {
         self.execute_plan(
             &self.client.publishing.transfer_artifact_owner(input)?,
+            options,
+        )
+    }
+
+    pub fn transfer_artifact_owner_with_controller(
+        &self,
+        input: &TransferArtifactOwnerWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .transfer_artifact_owner_with_controller(input)?,
             options,
         )
     }
@@ -366,6 +535,90 @@ impl PaperProofService {
                 .client
                 .comments
                 .transfer_tree_owner(tree_id, new_owner)?,
+            options,
+        )
+    }
+
+    pub fn transfer_tree_owner_with_controller(
+        &self,
+        input: &TransferTreeOwnerWithControllerInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .comments
+                .transfer_tree_owner_with_controller(input)?,
+            options,
+        )
+    }
+
+    pub fn promote_existing_series_to_dual_mode(
+        &self,
+        input: &PromoteExistingSeriesToDualModeInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_dual_mode(input)?,
+            options,
+        )
+    }
+
+    pub fn promote_existing_series_to_controller_primary(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_controller_primary(input)?,
+            options,
+        )
+    }
+
+    pub fn promote_existing_series_to_controller_only(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_controller_only(input)?,
+            options,
+        )
+    }
+
+    pub fn sync_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .sync_existing_series_control_mirrors(input)?,
+            options,
+        )
+    }
+
+    pub fn repair_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&CliExecutionOptions>,
+    ) -> Result<CliExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .repair_existing_series_control_mirrors(input)?,
             options,
         )
     }
@@ -561,6 +814,90 @@ where
         .await
     }
 
+    pub async fn add_preprint_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<PreprintInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_preprint_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn add_blog_post_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<BlogPostInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_blog_post_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn add_technical_report_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<TechnicalReportInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_technical_report_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn add_dataset_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<DatasetInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_dataset_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn add_software_release_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<SoftwareReleaseInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_software_release_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn add_generic_file_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<GenericFileInput>,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        self.execute_add_version(
+            self.client
+                .publishing
+                .add_generic_file_version_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
     pub async fn add_onchain_comment(
         &self,
         input: &AddOnchainCommentInput,
@@ -574,6 +911,178 @@ where
         Ok(ProviderExecutedResult { execution, result })
     }
 
+    pub async fn add_blob_comment(
+        &self,
+        input: &AddBlobCommentInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<CommentResult>> {
+        let execution = self
+            .execute_plan(&self.client.comments.add_blob_comment(input)?, options)
+            .await?;
+        let cli = execution.clone().into_cli_output()?;
+        let result = cli.comment_result(&self.client.deployment)?;
+        Ok(ProviderExecutedResult { execution, result })
+    }
+
+    pub async fn set_tree_status_with_controller(
+        &self,
+        input: &SetTreeStatusWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self.client.comments.set_tree_status_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn set_comment_status_with_controller(
+        &self,
+        input: &SetCommentStatusWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self.client.comments.set_comment_status_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn transfer_artifact_owner_with_controller(
+        &self,
+        input: &TransferArtifactOwnerWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .transfer_artifact_owner_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn transfer_tree_owner_with_controller(
+        &self,
+        input: &TransferTreeOwnerWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .comments
+                .transfer_tree_owner_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn update_series_metadata_with_controller(
+        &self,
+        input: &UpdateSeriesMetadataWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .update_series_metadata_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn update_series_description_with_controller(
+        &self,
+        input: &UpdateSeriesDescriptionWithControllerInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .update_series_description_with_controller(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn promote_existing_series_to_dual_mode(
+        &self,
+        input: &PromoteExistingSeriesToDualModeInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_dual_mode(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn promote_existing_series_to_controller_primary(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_controller_primary(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn promote_existing_series_to_controller_only(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .promote_existing_series_to_controller_only(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn sync_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .sync_existing_series_control_mirrors(input)?,
+            options,
+        )
+        .await
+    }
+
+    pub async fn repair_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutionOutput> {
+        self.execute_plan(
+            &self
+                .client
+                .publishing
+                .repair_existing_series_control_mirrors(input)?,
+            options,
+        )
+        .await
+    }
+
     async fn execute_publish(
         &self,
         plan: TransactionPlan,
@@ -582,6 +1091,17 @@ where
         let execution = self.execute_plan(&plan, options).await?;
         let cli = execution.clone().into_cli_output()?;
         let result = cli.publish_result(&self.client.deployment)?;
+        Ok(ProviderExecutedResult { execution, result })
+    }
+
+    async fn execute_add_version(
+        &self,
+        plan: TransactionPlan,
+        options: Option<&ProviderExecutionOptions>,
+    ) -> Result<ProviderExecutedResult<AddVersionResult>> {
+        let execution = self.execute_plan(&plan, options).await?;
+        let cli = execution.clone().into_cli_output()?;
+        let result = cli.add_version_result(&self.client.deployment)?;
         Ok(ProviderExecutedResult { execution, result })
     }
 }

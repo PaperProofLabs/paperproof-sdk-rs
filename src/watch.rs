@@ -4,6 +4,7 @@
 use serde_json::{Value, json};
 
 use crate::{
+    deployment::{DeploymentPackageFamily, deployment_package_ids},
     error::Result,
     events::SuiEventEnvelope,
     events_trust::EventTrustLevel,
@@ -58,6 +59,7 @@ pub struct PaperProofTrustedEventWatcher {
     query: PaperProofQueryClient,
     pub options: WatchOptions,
     pub filter: EventQueryInput,
+    event_types: Option<Vec<String>>,
     pub trust: EventTrustLevel,
     pub include_rejected: bool,
     pub verify_walrus: bool,
@@ -200,7 +202,7 @@ impl PaperProofTrustedEventWatcher {
         let mut pages = Vec::new();
         let mut next_cursor = self.cursor.clone();
         for _ in 0..self.options.max_pages_per_tick.max(1) {
-            let input = EventQueryInput {
+            let base_input = EventQueryInput {
                 sender: self.filter.sender.clone(),
                 package_id: self.filter.package_id.clone(),
                 module: self.filter.module.clone(),
@@ -214,15 +216,33 @@ impl PaperProofTrustedEventWatcher {
                     descending_order: Some(self.options.descending_order),
                 },
             };
-            let mut page = self
-                .query
-                .query_trusted_events(TrustedEventQueryInput {
-                    query: input,
-                    trust: self.trust.clone(),
-                    include_rejected: self.include_rejected,
-                    verify_walrus: self.verify_walrus,
-                })
-                .await?;
+            let mut page = if let Some(event_types) = &self.event_types {
+                let mut trusted_pages = Vec::new();
+                for event_type in event_types {
+                    let mut input = base_input.clone();
+                    input.move_event_type = Some(event_type.clone());
+                    trusted_pages.push(
+                        self.query
+                            .query_trusted_events(TrustedEventQueryInput {
+                                query: input,
+                                trust: self.trust.clone(),
+                                include_rejected: self.include_rejected,
+                                verify_walrus: self.verify_walrus,
+                            })
+                            .await?,
+                    );
+                }
+                combine_trusted_pages(trusted_pages, self.trust.clone())
+            } else {
+                self.query
+                    .query_trusted_events(TrustedEventQueryInput {
+                        query: base_input,
+                        trust: self.trust.clone(),
+                        include_rejected: self.include_rejected,
+                        verify_walrus: self.verify_walrus,
+                    })
+                    .await?
+            };
             if self.options.dedupe {
                 let fresh = page
                     .data
@@ -286,6 +306,7 @@ impl PaperProofWatchClient {
             cursor: options.cursor.clone(),
             options,
             filter: EventQueryInput::default(),
+            event_types: None,
             trust,
             include_rejected: false,
             verify_walrus: false,
@@ -310,6 +331,7 @@ impl PaperProofWatchClient {
             cursor: options.cursor.clone(),
             options,
             filter: EventQueryInput::default(),
+            event_types: None,
             trust,
             include_rejected,
             verify_walrus,
@@ -323,10 +345,13 @@ impl PaperProofWatchClient {
         struct_name: &str,
         options: WatchOptions,
     ) -> PaperProofEventWatcher {
-        self.watch_move_event_type(
-            "publishing",
-            struct_name,
-            &self.query.deployment.packages.publishing,
+        self.watcher(
+            WatchFetch::EventTypes(
+                deployment_package_ids(&self.query.deployment, DeploymentPackageFamily::Publishing)
+                    .into_iter()
+                    .map(|package_id| move_event_type(&package_id, "publishing", struct_name))
+                    .collect(),
+            ),
             options,
         )
     }
@@ -336,10 +361,13 @@ impl PaperProofWatchClient {
         struct_name: &str,
         options: WatchOptions,
     ) -> PaperProofEventWatcher {
-        self.watch_move_event_type(
-            "comments",
-            struct_name,
-            &self.query.deployment.packages.comments,
+        self.watcher(
+            WatchFetch::EventTypes(
+                deployment_package_ids(&self.query.deployment, DeploymentPackageFamily::Comments)
+                    .into_iter()
+                    .map(|package_id| move_event_type(&package_id, "comments", struct_name))
+                    .collect(),
+            ),
             options,
         )
     }
@@ -359,15 +387,16 @@ impl PaperProofWatchClient {
         include_rejected: bool,
         verify_walrus: bool,
     ) -> PaperProofTrustedEventWatcher {
-        self.watch_trusted_move_event_type(
+        self.watch_trusted_event_types(
             TrustedWatchConfig {
                 trust: EventTrustLevel::Verified,
                 include_rejected,
                 verify_walrus,
             },
-            "publishing",
-            struct_name,
-            &self.query.deployment.packages.publishing,
+            deployment_package_ids(&self.query.deployment, DeploymentPackageFamily::Publishing)
+                .into_iter()
+                .map(|package_id| move_event_type(&package_id, "publishing", struct_name))
+                .collect(),
             options,
         )
     }
@@ -379,15 +408,16 @@ impl PaperProofWatchClient {
         include_rejected: bool,
         verify_walrus: bool,
     ) -> PaperProofTrustedEventWatcher {
-        self.watch_trusted_move_event_type(
+        self.watch_trusted_event_types(
             TrustedWatchConfig {
                 trust: EventTrustLevel::Verified,
                 include_rejected,
                 verify_walrus,
             },
-            "comments",
-            struct_name,
-            &self.query.deployment.packages.comments,
+            deployment_package_ids(&self.query.deployment, DeploymentPackageFamily::Comments)
+                .into_iter()
+                .map(|package_id| move_event_type(&package_id, "comments", struct_name))
+                .collect(),
             options,
         )
     }
@@ -399,18 +429,18 @@ impl PaperProofWatchClient {
         include_rejected: bool,
         verify_walrus: bool,
     ) -> PaperProofTrustedEventWatcher {
-        let mut watcher = self.watch_trusted_events_with_verification_options(
-            EventTrustLevel::Verified,
+        self.watch_trusted_event_types(
+            TrustedWatchConfig {
+                trust: EventTrustLevel::Verified,
+                include_rejected,
+                verify_walrus,
+            },
+            deployment_package_ids(&self.query.deployment, DeploymentPackageFamily::Governance)
+                .into_iter()
+                .map(|package_id| move_event_type(&package_id, "governance_voting", struct_name))
+                .collect(),
             options,
-            include_rejected,
-            verify_walrus,
-        );
-        watcher.filter.move_event_type = Some(move_event_type(
-            &self.query.deployment.packages.governance,
-            "governance_voting",
-            struct_name,
-        ));
-        watcher
+        )
     }
 
     pub fn watch_artifact_published_events(&self, options: WatchOptions) -> PaperProofEventWatcher {
@@ -518,80 +548,79 @@ impl PaperProofWatchClient {
     }
 
     pub fn watch_status_changed_events(&self, options: WatchOptions) -> PaperProofEventWatcher {
+        let publishing = deployment_package_ids(
+            &self.query.deployment,
+            DeploymentPackageFamily::Publishing,
+        );
+        let comments = deployment_package_ids(
+            &self.query.deployment,
+            DeploymentPackageFamily::Comments,
+        );
         self.watcher(
-            WatchFetch::EventTypes(vec![
-                move_event_type(
-                    &self.query.deployment.packages.publishing,
-                    "publishing",
-                    "ArtifactStatusChangedEvent",
-                ),
-                move_event_type(
-                    &self.query.deployment.packages.publishing,
-                    "publishing",
-                    "ProtocolPausedChangedEvent",
-                ),
-                move_event_type(
-                    &self.query.deployment.packages.comments,
-                    "comments",
-                    "TreeStatusChangedEvent",
-                ),
-                move_event_type(
-                    &self.query.deployment.packages.comments,
-                    "comments",
-                    "CommentStatusChangedEvent",
-                ),
-            ]),
+            WatchFetch::EventTypes(
+                publishing
+                    .iter()
+                    .map(|package_id| {
+                        move_event_type(package_id, "publishing", "ArtifactStatusChangedEvent")
+                    })
+                    .chain(publishing.iter().map(|package_id| {
+                        move_event_type(package_id, "publishing", "ProtocolPausedChangedEvent")
+                    }))
+                    .chain(comments.iter().map(|package_id| {
+                        move_event_type(package_id, "comments", "TreeStatusChangedEvent")
+                    }))
+                    .chain(comments.iter().map(|package_id| {
+                        move_event_type(package_id, "comments", "CommentStatusChangedEvent")
+                    }))
+                    .collect(),
+            ),
             options,
         )
     }
 
     pub fn watch_owner_transferred_events(&self, options: WatchOptions) -> PaperProofEventWatcher {
+        let publishing = deployment_package_ids(
+            &self.query.deployment,
+            DeploymentPackageFamily::Publishing,
+        );
+        let comments = deployment_package_ids(
+            &self.query.deployment,
+            DeploymentPackageFamily::Comments,
+        );
         self.watcher(
-            WatchFetch::EventTypes(vec![
-                move_event_type(
-                    &self.query.deployment.packages.publishing,
-                    "publishing",
-                    "ArtifactOwnerTransferredEvent",
-                ),
-                move_event_type(
-                    &self.query.deployment.packages.comments,
-                    "comments",
-                    "TreeOwnerTransferredEvent",
-                ),
-            ]),
+            WatchFetch::EventTypes(
+                publishing
+                    .iter()
+                    .map(|package_id| {
+                        move_event_type(package_id, "publishing", "ArtifactOwnerTransferredEvent")
+                    })
+                    .chain(comments.iter().map(|package_id| {
+                        move_event_type(package_id, "comments", "TreeOwnerTransferredEvent")
+                    }))
+                    .collect(),
+            ),
             options,
         )
     }
 
-    fn watch_move_event_type(
-        &self,
-        module: &str,
-        struct_name: &str,
-        package_id: &str,
-        options: WatchOptions,
-    ) -> PaperProofEventWatcher {
-        self.watcher(
-            WatchFetch::MoveEventType(move_event_type(package_id, module, struct_name)),
-            options,
-        )
-    }
-
-    fn watch_trusted_move_event_type(
+    fn watch_trusted_event_types(
         &self,
         config: TrustedWatchConfig,
-        module: &str,
-        struct_name: &str,
-        package_id: &str,
+        event_types: Vec<String>,
         options: WatchOptions,
     ) -> PaperProofTrustedEventWatcher {
-        let mut watcher = self.watch_trusted_events_with_verification_options(
-            config.trust,
+        PaperProofTrustedEventWatcher {
+            query: self.query.clone(),
+            cursor: None,
             options,
-            config.include_rejected,
-            config.verify_walrus,
-        );
-        watcher.filter.move_event_type = Some(move_event_type(package_id, module, struct_name));
-        watcher
+            filter: EventQueryInput::default(),
+            event_types: Some(event_types),
+            trust: config.trust,
+            include_rejected: config.include_rejected,
+            verify_walrus: config.verify_walrus,
+            stopped: false,
+            seen: Vec::new(),
+        }
     }
 
     fn watcher(&self, fetch: WatchFetch, options: WatchOptions) -> PaperProofEventWatcher {

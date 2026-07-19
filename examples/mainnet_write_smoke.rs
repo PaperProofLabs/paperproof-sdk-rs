@@ -99,6 +99,8 @@ fn main() -> paperproof_sdk_rs::Result<()> {
                 walrus_blob_object_id: "0x6".to_string(),
                 content_type: "text/plain".to_string(),
             },
+            series_description: Some("Rust SDK mainnet smoke artifact".to_string()),
+            version_change_note: Some("Initial smoke version".to_string()),
             series_metadata: vec![],
             version_metadata: vec![],
             payment_coin_id: None,

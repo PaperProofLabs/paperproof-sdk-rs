@@ -3,19 +3,25 @@
 
 use crate::{
     builders::base::BaseBuilder,
+    constants::{PROTOCOL_LIMITS, reserved_metadata_keys},
     deployment::Deployment,
     error::{PaperProofError, Result},
     transaction::{
         MoveArgument as Arg, MoveCall, TransactionPlan, TransactionValueRef, TransferObjects,
     },
     types::{
-        AddVersionInput, BlogPostInput, DatasetInput, GenericFileInput, MetadataAttribute,
-        PreprintInput, SoftwareReleaseInput, TechnicalReportInput, TransferArtifactOwnerInput,
+        AddVersionInput, AddVersionWithControllerInput, BlogPostInput, CommonContentInput,
+        DatasetInput, GenericFileInput, MetadataAttribute, PreprintInput,
+        PromoteExistingSeriesControllerModeInput, PromoteExistingSeriesToDualModeInput,
+        SoftwareReleaseInput, TechnicalReportInput, TransferArtifactOwnerInput,
+        TransferArtifactOwnerWithControllerInput, UpdateSeriesDescriptionWithControllerInput,
+        UpdateSeriesMetadataWithControllerInput,
     },
     validation::{
-        validate_blog_post_input, validate_dataset_input, validate_generic_file_input,
-        validate_metadata_attributes, validate_object_id, validate_preprint_input,
-        validate_software_release_input, validate_technical_report_input,
+        validate_address, validate_blog_post_input, validate_dataset_input,
+        validate_generic_file_input, validate_metadata_attributes, validate_object_id,
+        validate_preprint_input, validate_required_text, validate_software_release_input,
+        validate_technical_report_input,
     },
 };
 
@@ -65,7 +71,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(reservation_id)?;
         validate_preprint_input(input)?;
-        Ok(self.publish_call_with_context(
+        self.publish_call_with_context(
             "finalize_reserved_preprint",
             PublishCallContext {
                 prefix: vec![Arg::Object(reservation_id.to_string())],
@@ -80,15 +86,18 @@ impl PublishingBuilder {
                 ],
                 content: &input.content,
                 series_metadata: &input.series_metadata,
+                series_description: input.series_description.as_deref(),
                 version_metadata: &input.version_metadata,
+                version_change_note: input.version_change_note.as_deref(),
+                require_version_change_note: false,
                 payment_coin_id: input.payment_coin_id.as_ref(),
             },
-        ))
+        )
     }
 
     pub fn publish_blog_post(&self, input: &BlogPostInput) -> Result<TransactionPlan> {
         validate_blog_post_input(input)?;
-        Ok(self.publish_call(
+        self.publish_call(
             "publish_blog_post",
             vec![
                 Arg::String(input.title.clone()),
@@ -98,9 +107,11 @@ impl PublishingBuilder {
             ],
             &input.content,
             &input.series_metadata,
+            input.series_description.as_deref(),
             &input.version_metadata,
+            input.version_change_note.as_deref(),
             input.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn publish_technical_report(
@@ -108,7 +119,7 @@ impl PublishingBuilder {
         input: &TechnicalReportInput,
     ) -> Result<TransactionPlan> {
         validate_technical_report_input(input)?;
-        Ok(self.publish_call(
+        self.publish_call(
             "publish_technical_report",
             vec![
                 Arg::String(input.title.clone()),
@@ -121,14 +132,16 @@ impl PublishingBuilder {
             ],
             &input.content,
             &input.series_metadata,
+            input.series_description.as_deref(),
             &input.version_metadata,
+            input.version_change_note.as_deref(),
             input.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn publish_dataset(&self, input: &DatasetInput) -> Result<TransactionPlan> {
         validate_dataset_input(input)?;
-        Ok(self.publish_call(
+        self.publish_call(
             "publish_dataset",
             vec![
                 Arg::String(input.title.clone()),
@@ -141,9 +154,11 @@ impl PublishingBuilder {
             ],
             &input.content,
             &input.series_metadata,
+            input.series_description.as_deref(),
             &input.version_metadata,
+            input.version_change_note.as_deref(),
             input.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn publish_software_release(
@@ -151,7 +166,7 @@ impl PublishingBuilder {
         input: &SoftwareReleaseInput,
     ) -> Result<TransactionPlan> {
         validate_software_release_input(input)?;
-        Ok(self.publish_call(
+        self.publish_call(
             "publish_software_release",
             vec![
                 Arg::String(input.project_name.clone()),
@@ -164,14 +179,16 @@ impl PublishingBuilder {
             ],
             &input.content,
             &input.series_metadata,
+            input.series_description.as_deref(),
             &input.version_metadata,
+            input.version_change_note.as_deref(),
             input.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn publish_generic_file(&self, input: &GenericFileInput) -> Result<TransactionPlan> {
         validate_generic_file_input(input)?;
-        Ok(self.publish_call(
+        self.publish_call(
             "publish_generic_file",
             vec![
                 Arg::String(input.title.clone()),
@@ -182,9 +199,11 @@ impl PublishingBuilder {
             ],
             &input.content,
             &input.series_metadata,
+            input.series_description.as_deref(),
             &input.version_metadata,
+            input.version_change_note.as_deref(),
             input.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn add_preprint_version(
@@ -193,7 +212,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_preprint_input(&input.body)?;
-        Ok(self.add_version_call(
+        self.add_version_call(
             "add_preprint_version",
             &input.series_id,
             vec![
@@ -207,32 +226,39 @@ impl PublishingBuilder {
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
-    pub fn add_software_release_version(
+    pub fn add_preprint_version_with_controller(
         &self,
-        input: &AddVersionInput<SoftwareReleaseInput>,
+        input: &AddVersionWithControllerInput<PreprintInput>,
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
-        validate_software_release_input(&input.body)?;
-        Ok(self.add_version_call(
-            "add_software_release_version",
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_preprint_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_preprint_version_with_controller",
             &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
             vec![
-                Arg::String(input.body.project_name.clone()),
-                Arg::String(input.body.version_name.clone()),
-                Arg::String(input.body.source_hash.clone()),
-                Arg::String(input.body.package_hash.clone()),
-                Arg::String(input.body.changelog.clone()),
+                Arg::String(input.body.title.clone()),
+                Arg::String(input.body.abstract_text.clone()),
+                Arg::StringVector(input.body.authors.clone()),
+                Arg::StringVector(input.body.keywords.clone()),
+                Arg::String(input.body.field.clone()),
                 Arg::String(input.body.license.clone()),
-                Arg::String(input.body.repository_url.clone()),
+                Arg::U64(input.body.page_count),
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
     }
 
     pub fn add_blog_post_version(
@@ -241,7 +267,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_blog_post_input(&input.body)?;
-        Ok(self.add_version_call(
+        self.add_version_call(
             "add_blog_post_version",
             &input.series_id,
             vec![
@@ -252,8 +278,36 @@ impl PublishingBuilder {
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
+    }
+
+    pub fn add_blog_post_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<BlogPostInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_blog_post_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_blog_post_version_with_controller",
+            &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
+            vec![
+                Arg::String(input.body.title.clone()),
+                Arg::String(input.body.summary.clone()),
+                Arg::StringVector(input.body.tags.clone()),
+                Arg::String(input.body.language.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            input.body.payment_coin_id.as_ref(),
+        )
     }
 
     pub fn add_technical_report_version(
@@ -262,7 +316,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_technical_report_input(&input.body)?;
-        Ok(self.add_version_call(
+        self.add_version_call(
             "add_technical_report_version",
             &input.series_id,
             vec![
@@ -276,8 +330,39 @@ impl PublishingBuilder {
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
+    }
+
+    pub fn add_technical_report_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<TechnicalReportInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_technical_report_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_technical_report_version_with_controller",
+            &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
+            vec![
+                Arg::String(input.body.title.clone()),
+                Arg::String(input.body.abstract_text.clone()),
+                Arg::StringVector(input.body.authors.clone()),
+                Arg::String(input.body.organization.clone()),
+                Arg::String(input.body.report_number.clone()),
+                Arg::StringVector(input.body.keywords.clone()),
+                Arg::String(input.body.license.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            input.body.payment_coin_id.as_ref(),
+        )
     }
 
     pub fn add_dataset_version(
@@ -286,7 +371,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_dataset_input(&input.body)?;
-        Ok(self.add_version_call(
+        self.add_version_call(
             "add_dataset_version",
             &input.series_id,
             vec![
@@ -300,8 +385,94 @@ impl PublishingBuilder {
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
+    }
+
+    pub fn add_dataset_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<DatasetInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_dataset_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_dataset_version_with_controller",
+            &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
+            vec![
+                Arg::String(input.body.title.clone()),
+                Arg::String(input.body.description.clone()),
+                Arg::String(input.body.format.clone()),
+                Arg::U64(input.body.file_count),
+                Arg::U64(input.body.size_bytes),
+                Arg::String(input.body.license.clone()),
+                Arg::StringVector(input.body.keywords.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            input.body.payment_coin_id.as_ref(),
+        )
+    }
+
+    pub fn add_software_release_version(
+        &self,
+        input: &AddVersionInput<SoftwareReleaseInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_software_release_input(&input.body)?;
+        self.add_version_call(
+            "add_software_release_version",
+            &input.series_id,
+            vec![
+                Arg::String(input.body.project_name.clone()),
+                Arg::String(input.body.version_name.clone()),
+                Arg::String(input.body.source_hash.clone()),
+                Arg::String(input.body.package_hash.clone()),
+                Arg::String(input.body.changelog.clone()),
+                Arg::String(input.body.license.clone()),
+                Arg::String(input.body.repository_url.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
+            input.body.payment_coin_id.as_ref(),
+        )
+    }
+
+    pub fn add_software_release_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<SoftwareReleaseInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_software_release_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_software_release_version_with_controller",
+            &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
+            vec![
+                Arg::String(input.body.project_name.clone()),
+                Arg::String(input.body.version_name.clone()),
+                Arg::String(input.body.source_hash.clone()),
+                Arg::String(input.body.package_hash.clone()),
+                Arg::String(input.body.changelog.clone()),
+                Arg::String(input.body.license.clone()),
+                Arg::String(input.body.repository_url.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            input.body.payment_coin_id.as_ref(),
+        )
     }
 
     pub fn add_generic_file_version(
@@ -310,7 +481,7 @@ impl PublishingBuilder {
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_generic_file_input(&input.body)?;
-        Ok(self.add_version_call(
+        self.add_version_call(
             "add_generic_file_version",
             &input.series_id,
             vec![
@@ -322,8 +493,37 @@ impl PublishingBuilder {
             ],
             &input.body.content,
             &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            false,
             input.body.payment_coin_id.as_ref(),
-        ))
+        )
+    }
+
+    pub fn add_generic_file_version_with_controller(
+        &self,
+        input: &AddVersionWithControllerInput<GenericFileInput>,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_generic_file_input(&input.body)?;
+        self.add_version_with_controller_call(
+            "add_generic_file_version_with_controller",
+            &input.series_id,
+            &input.control_record_id,
+            &input.controller_nft_id,
+            vec![
+                Arg::String(input.body.title.clone()),
+                Arg::String(input.body.description.clone()),
+                Arg::String(input.body.filename.clone()),
+                Arg::U64(input.body.file_size),
+                Arg::String(input.body.license.clone()),
+            ],
+            &input.body.content,
+            &input.body.version_metadata,
+            input.body.version_change_note.as_deref(),
+            input.body.payment_coin_id.as_ref(),
+        )
     }
 
     pub fn update_series_metadata(
@@ -345,13 +545,82 @@ impl PublishingBuilder {
         }))
     }
 
+    pub fn update_series_metadata_with_controller(
+        &self,
+        input: &UpdateSeriesMetadataWithControllerInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_metadata_attributes(&input.metadata)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self
+                .base
+                .publishing_target("update_series_metadata_extensions_with_controller"),
+            arguments: vec![
+                Arg::Object(input.series_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::MetadataVector(input.metadata.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
+    pub fn update_series_description(
+        &self,
+        series_id: &str,
+        description: &str,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(series_id)?;
+        validate_required_text(
+            "description",
+            description,
+            PROTOCOL_LIMITS.max_long_text_bytes,
+        )?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.publishing_target("update_series_description"),
+            arguments: vec![
+                Arg::Object(series_id.to_string()),
+                Arg::String(description.to_string()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
+    pub fn update_series_description_with_controller(
+        &self,
+        input: &UpdateSeriesDescriptionWithControllerInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_required_text(
+            "description",
+            &input.description,
+            PROTOCOL_LIMITS.max_long_text_bytes,
+        )?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self
+                .base
+                .publishing_target("update_series_description_with_controller"),
+            arguments: vec![
+                Arg::Object(input.series_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::String(input.description.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
     pub fn transfer_artifact_owner(
         &self,
         input: &TransferArtifactOwnerInput,
     ) -> Result<TransactionPlan> {
         validate_object_id(&input.series_id)?;
         validate_object_id(&input.comments_tree_id)?;
-        crate::validation::validate_address(&input.new_owner)?;
+        validate_address(&input.new_owner)?;
         Ok(TransactionPlan::single(MoveCall {
             target: self.base.publishing_target("transfer_artifact_owner"),
             arguments: vec![
@@ -363,15 +632,108 @@ impl PublishingBuilder {
         }))
     }
 
+    pub fn transfer_artifact_owner_with_controller(
+        &self,
+        input: &TransferArtifactOwnerWithControllerInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.comments_tree_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_address(&input.new_owner)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self
+                .base
+                .publishing_target("transfer_artifact_owner_with_controller"),
+            arguments: vec![
+                Arg::Object(input.series_id.clone()),
+                Arg::Object(input.comments_tree_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::Address(input.new_owner.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
+    pub fn promote_existing_series_to_dual_mode(
+        &self,
+        input: &PromoteExistingSeriesToDualModeInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.comments_tree_id)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self
+                .base
+                .publishing_target("promote_existing_series_to_dual_mode"),
+            arguments: vec![
+                Arg::Object(input.series_id.clone()),
+                Arg::Object(input.comments_tree_id.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
+    pub fn promote_existing_series_to_controller_primary(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+    ) -> Result<TransactionPlan> {
+        self.controller_promotion_call("promote_existing_series_to_controller_primary", input)
+    }
+
+    pub fn promote_existing_series_to_controller_only(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+    ) -> Result<TransactionPlan> {
+        self.controller_promotion_call("promote_existing_series_to_controller_only", input)
+    }
+
+    pub fn sync_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+    ) -> Result<TransactionPlan> {
+        self.controller_promotion_call("sync_existing_series_control_mirrors", input)
+    }
+
+    pub fn repair_existing_series_control_mirrors(
+        &self,
+        input: &PromoteExistingSeriesControllerModeInput,
+    ) -> Result<TransactionPlan> {
+        self.controller_promotion_call("repair_existing_series_control_mirrors", input)
+    }
+
+    fn controller_promotion_call(
+        &self,
+        function: &str,
+        input: &PromoteExistingSeriesControllerModeInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.series_id)?;
+        validate_object_id(&input.comments_tree_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.publishing_target(function),
+            arguments: vec![
+                Arg::Object(input.series_id.clone()),
+                Arg::Object(input.comments_tree_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
     fn publish_call(
         &self,
         function: &str,
         args: Vec<Arg>,
-        content: &crate::types::CommonContentInput,
+        content: &CommonContentInput,
         series_metadata: &[MetadataAttribute],
+        series_description: Option<&str>,
         version_metadata: &[MetadataAttribute],
+        version_change_note: Option<&str>,
         payment_coin_id: Option<&String>,
-    ) -> TransactionPlan {
+    ) -> Result<TransactionPlan> {
         self.publish_call_with_context(
             function,
             PublishCallContext {
@@ -379,7 +741,10 @@ impl PublishingBuilder {
                 args,
                 content,
                 series_metadata,
+                series_description,
                 version_metadata,
+                version_change_note,
+                require_version_change_note: false,
                 payment_coin_id,
             },
         )
@@ -389,29 +754,34 @@ impl PublishingBuilder {
         &self,
         function: &str,
         mut context: PublishCallContext<'_>,
-    ) -> TransactionPlan {
-        let mut arguments = vec![
+    ) -> Result<TransactionPlan> {
+        let mut arguments = Vec::new();
+        arguments.append(&mut context.prefix);
+        arguments.extend([
             Arg::Object(self.base.deployment.objects.root.clone()),
             Arg::Object(self.base.deployment.objects.type_registry.clone()),
             Arg::Object(self.base.deployment.objects.governance_vault.clone()),
             Arg::Object(self.base.deployment.objects.fee_manager.clone()),
-        ];
-        if !context.prefix.is_empty() {
-            context.prefix.append(&mut arguments);
-            arguments = context.prefix;
-        }
+        ]);
         arguments.append(&mut context.args);
         append_content_args(&mut arguments, context.content);
         arguments.extend([
-            Arg::MetadataVector(context.series_metadata.to_vec()),
-            Arg::MetadataVector(context.version_metadata.to_vec()),
+            Arg::MetadataVector(self.series_metadata_vector(
+                context.series_metadata,
+                context.series_description,
+            )?),
+            Arg::MetadataVector(self.version_metadata_vector(
+                context.version_metadata,
+                context.version_change_note,
+                context.require_version_change_note,
+            )?),
             self.base.sui_payment(context.payment_coin_id),
             Arg::Object(self.base.deployment.objects.clock.clone()),
         ]);
-        TransactionPlan::single(MoveCall {
+        Ok(TransactionPlan::single(MoveCall {
             target: self.base.publishing_target(function),
             arguments,
-        })
+        }))
     }
 
     fn add_version_call(
@@ -419,10 +789,12 @@ impl PublishingBuilder {
         function: &str,
         series_id: &str,
         mut args: Vec<Arg>,
-        content: &crate::types::CommonContentInput,
+        content: &CommonContentInput,
         version_metadata: &[MetadataAttribute],
+        version_change_note: Option<&str>,
+        require_version_change_note: bool,
         payment_coin_id: Option<&String>,
-    ) -> TransactionPlan {
+    ) -> Result<TransactionPlan> {
         let mut arguments = vec![
             Arg::Object(self.base.deployment.objects.root.clone()),
             Arg::Object(self.base.deployment.objects.type_registry.clone()),
@@ -433,27 +805,135 @@ impl PublishingBuilder {
         arguments.append(&mut args);
         append_content_args(&mut arguments, content);
         arguments.extend([
-            Arg::MetadataVector(version_metadata.to_vec()),
+            Arg::MetadataVector(self.version_metadata_vector(
+                version_metadata,
+                version_change_note,
+                require_version_change_note,
+            )?),
             self.base.sui_payment(payment_coin_id),
             Arg::Object(self.base.deployment.objects.clock.clone()),
         ]);
-        TransactionPlan::single(MoveCall {
+        Ok(TransactionPlan::single(MoveCall {
             target: self.base.publishing_target(function),
             arguments,
-        })
+        }))
+    }
+
+    fn add_version_with_controller_call(
+        &self,
+        function: &str,
+        series_id: &str,
+        control_record_id: &str,
+        controller_nft_id: &str,
+        mut args: Vec<Arg>,
+        content: &CommonContentInput,
+        version_metadata: &[MetadataAttribute],
+        version_change_note: Option<&str>,
+        payment_coin_id: Option<&String>,
+    ) -> Result<TransactionPlan> {
+        let mut arguments = vec![
+            Arg::Object(self.base.deployment.objects.root.clone()),
+            Arg::Object(self.base.deployment.objects.type_registry.clone()),
+            Arg::Object(series_id.to_string()),
+            Arg::Object(control_record_id.to_string()),
+            Arg::Object(controller_nft_id.to_string()),
+            Arg::Object(self.base.deployment.objects.governance_vault.clone()),
+            Arg::Object(self.base.deployment.objects.fee_manager.clone()),
+        ];
+        arguments.append(&mut args);
+        append_content_args(&mut arguments, content);
+        arguments.extend([
+            Arg::MetadataVector(self.version_metadata_vector(
+                version_metadata,
+                version_change_note,
+                true,
+            )?),
+            self.base.sui_payment(payment_coin_id),
+            Arg::Object(self.base.deployment.objects.clock.clone()),
+        ]);
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.publishing_target(function),
+            arguments,
+        }))
+    }
+
+    fn series_metadata_vector(
+        &self,
+        metadata: &[MetadataAttribute],
+        description: Option<&str>,
+    ) -> Result<Vec<MetadataAttribute>> {
+        self.with_reserved_metadata(
+            metadata,
+            reserved_metadata_keys::SERIES_DESCRIPTION,
+            description,
+        )
+    }
+
+    fn version_metadata_vector(
+        &self,
+        metadata: &[MetadataAttribute],
+        change_note: Option<&str>,
+        require_change_note: bool,
+    ) -> Result<Vec<MetadataAttribute>> {
+        let merged = self.with_reserved_metadata(
+            metadata,
+            reserved_metadata_keys::VERSION_CHANGE_NOTE,
+            change_note,
+        )?;
+        if require_change_note
+            && !merged.iter().any(|item| {
+                item.key == reserved_metadata_keys::VERSION_CHANGE_NOTE
+                    && !item.value.trim().is_empty()
+            })
+        {
+            return Err(PaperProofError::invalid_input(
+                "version_change_note",
+                "version_change_note is required for controller-aware add-version flows",
+            ));
+        }
+        Ok(merged)
+    }
+
+    fn with_reserved_metadata(
+        &self,
+        metadata: &[MetadataAttribute],
+        reserved_key: &str,
+        reserved_value: Option<&str>,
+    ) -> Result<Vec<MetadataAttribute>> {
+        let mut next = metadata
+            .iter()
+            .filter(|item| item.key != reserved_key)
+            .cloned()
+            .collect::<Vec<_>>();
+        if let Some(value) = reserved_value {
+            validate_required_text(
+                reserved_key,
+                value,
+                PROTOCOL_LIMITS.max_metadata_value_bytes,
+            )?;
+            next.push(MetadataAttribute {
+                key: reserved_key.to_string(),
+                value: value.to_string(),
+            });
+        }
+        validate_metadata_attributes(&next)?;
+        Ok(next)
     }
 }
 
 struct PublishCallContext<'a> {
     prefix: Vec<Arg>,
     args: Vec<Arg>,
-    content: &'a crate::types::CommonContentInput,
+    content: &'a CommonContentInput,
     series_metadata: &'a [MetadataAttribute],
+    series_description: Option<&'a str>,
     version_metadata: &'a [MetadataAttribute],
+    version_change_note: Option<&'a str>,
+    require_version_change_note: bool,
     payment_coin_id: Option<&'a String>,
 }
 
-fn append_content_args(args: &mut Vec<Arg>, content: &crate::types::CommonContentInput) {
+fn append_content_args(args: &mut Vec<Arg>, content: &CommonContentInput) {
     args.extend([
         Arg::String(content.content_hash.clone()),
         Arg::String(content.walrus_blob_id.clone()),

@@ -76,6 +76,13 @@ pub fn validate_required_text(field: &str, value: &str, max: usize) -> Result<()
     validate_required_bytes(field, value.as_bytes(), max)
 }
 
+pub fn validate_optional_text(field: &str, value: Option<&str>, max: usize) -> Result<()> {
+    if let Some(text) = value {
+        validate_required_text(field, text, max)?;
+    }
+    Ok(())
+}
+
 pub fn validate_text_vector(
     field: &str,
     values: &[String],
@@ -178,6 +185,16 @@ pub fn validate_preprint_input(input: &PreprintInput) -> Result<()> {
         &input.license,
         PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
+    )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;
     validate_metadata_attributes(&input.version_metadata)
@@ -200,6 +217,16 @@ pub fn validate_blog_post_input(input: &BlogPostInput) -> Result<()> {
         "language",
         &input.language,
         PROTOCOL_LIMITS.max_short_text_bytes,
+    )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
     )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;
@@ -240,6 +267,16 @@ pub fn validate_technical_report_input(input: &TechnicalReportInput) -> Result<(
         &input.license,
         PROTOCOL_LIMITS.max_short_text_bytes,
     )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
+    )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;
     validate_metadata_attributes(&input.version_metadata)
@@ -261,6 +298,16 @@ pub fn validate_dataset_input(input: &DatasetInput) -> Result<()> {
         "license",
         &input.license,
         PROTOCOL_LIMITS.max_short_text_bytes,
+    )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
     )?;
     validate_text_vector(
         "keywords",
@@ -309,6 +356,16 @@ pub fn validate_software_release_input(input: &SoftwareReleaseInput) -> Result<(
         &input.repository_url,
         PROTOCOL_LIMITS.max_medium_text_bytes,
     )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
+    )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;
     validate_metadata_attributes(&input.version_metadata)
@@ -330,6 +387,16 @@ pub fn validate_generic_file_input(input: &GenericFileInput) -> Result<()> {
         "license",
         &input.license,
         PROTOCOL_LIMITS.max_short_text_bytes,
+    )?;
+    validate_optional_text(
+        "series_description",
+        input.series_description.as_deref(),
+        PROTOCOL_LIMITS.max_long_text_bytes,
+    )?;
+    validate_optional_text(
+        "version_change_note",
+        input.version_change_note.as_deref(),
+        PROTOCOL_LIMITS.max_metadata_value_bytes,
     )?;
     validate_common_content(&input.content)?;
     validate_metadata_attributes(&input.series_metadata)?;

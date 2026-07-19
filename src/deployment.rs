@@ -10,6 +10,8 @@ pub struct Deployment {
     pub rpc_url: String,
     pub protocol_version: String,
     pub packages: DeploymentPackages,
+    #[serde(default)]
+    pub package_history: DeploymentPackageHistory,
     pub objects: DeploymentObjects,
     pub coin_types: CoinTypes,
 }
@@ -20,7 +22,23 @@ pub struct DeploymentPackages {
     pub governance_original: String,
     pub governance: String,
     pub comments: String,
+    pub publishing_original: Option<String>,
     pub publishing: String,
+    pub controller: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct DeploymentPackageHistory {
+    #[serde(default)]
+    pub pprf: Vec<String>,
+    #[serde(default)]
+    pub governance: Vec<String>,
+    #[serde(default)]
+    pub comments: Vec<String>,
+    #[serde(default)]
+    pub publishing: Vec<String>,
+    #[serde(default)]
+    pub controller: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -45,17 +63,55 @@ pub fn mainnet_deployment() -> Deployment {
         name: "paperproof-mainnet-2026-05-13".to_string(),
         network: "mainnet".to_string(),
         rpc_url: "https://fullnode.mainnet.sui.io:443".to_string(),
-        protocol_version: "publishing-v3-governance-v2-comments-v2".to_string(),
+        protocol_version: "publishing-v4-comments-v3-controller-v1-governance-v2".to_string(),
         packages: DeploymentPackages {
             pprf: "0x5d2ec9829a9e116de7c2008281a90b96690beb2252af120ad05a25fe13fae0da".to_string(),
             governance_original:
                 "0x75923624e354789e995537e88afaab698bd405a61f91926e3f8837fb7cc6b5cf".to_string(),
             governance: "0xc1ced3b8ae5281eeeb8cdb5527978e294c54f14a7fd8d65e7e9502d4ffffb87e"
                 .to_string(),
-            comments: "0xaef346fc40bf20af62f4bbbc1608ba2272e80e4ba3d716634026baa589e9aeba"
+            comments: "0x4962dda7d3033a6dd23724721ee38ca16720e8949b94d39826d24eb09f39e0a6"
                 .to_string(),
-            publishing: "0xc9a75e4514db2a37df6f95b4e2b329c065ac6089953bd2c1c0a0c389835bd3d8"
+            publishing_original: Some(
+                "0xe67a6956f37c3182354189d9b77ca14058694aad82522da0c6cb91cfddee4782"
+                    .to_string(),
+            ),
+            publishing: "0xfd9ea70eef5220dbba93ae2bf7cd077d4ddebe03d585ebc7ad536ed3ba500660"
                 .to_string(),
+            controller: Some(
+                "0xe68fef47337eb2ee970431fae9519c4b2bb9f4505a3d14b6b91fdfc6aae3b75c"
+                    .to_string(),
+            ),
+        },
+        package_history: DeploymentPackageHistory {
+            pprf: vec![
+                "0x5d2ec9829a9e116de7c2008281a90b96690beb2252af120ad05a25fe13fae0da"
+                    .to_string(),
+            ],
+            governance: vec![
+                "0x75923624e354789e995537e88afaab698bd405a61f91926e3f8837fb7cc6b5cf"
+                    .to_string(),
+                "0xc1ced3b8ae5281eeeb8cdb5527978e294c54f14a7fd8d65e7e9502d4ffffb87e"
+                    .to_string(),
+            ],
+            comments: vec![
+                "0xaef346fc40bf20af62f4bbbc1608ba2272e80e4ba3d716634026baa589e9aeba"
+                    .to_string(),
+                "0x4962dda7d3033a6dd23724721ee38ca16720e8949b94d39826d24eb09f39e0a6"
+                    .to_string(),
+            ],
+            publishing: vec![
+                "0xe67a6956f37c3182354189d9b77ca14058694aad82522da0c6cb91cfddee4782"
+                    .to_string(),
+                "0xc9a75e4514db2a37df6f95b4e2b329c065ac6089953bd2c1c0a0c389835bd3d8"
+                    .to_string(),
+                "0xfd9ea70eef5220dbba93ae2bf7cd077d4ddebe03d585ebc7ad536ed3ba500660"
+                    .to_string(),
+            ],
+            controller: vec![
+                "0xe68fef47337eb2ee970431fae9519c4b2bb9f4505a3d14b6b91fdfc6aae3b75c"
+                    .to_string(),
+            ],
         },
         objects: DeploymentObjects {
             root: "0x7dc6c78b276825499a2204b060394e80b81196eb1f77d2036b503a2cca15dd78".to_string(),
@@ -81,3 +137,66 @@ pub fn mainnet_deployment() -> Deployment {
 
 pub static MAINNET_DEPLOYMENT: std::sync::LazyLock<Deployment> =
     std::sync::LazyLock::new(mainnet_deployment);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DeploymentPackageFamily {
+    Pprf,
+    Governance,
+    Comments,
+    Publishing,
+    Controller,
+}
+
+pub fn deployment_package_ids(
+    deployment: &Deployment,
+    family: DeploymentPackageFamily,
+) -> Vec<String> {
+    fn push_unique(out: &mut Vec<String>, value: Option<&str>) {
+        let Some(value) = value else {
+            return;
+        };
+        if !out.iter().any(|existing| existing.eq_ignore_ascii_case(value)) {
+            out.push(value.to_string());
+        }
+    }
+
+    let mut packages = Vec::new();
+    match family {
+        DeploymentPackageFamily::Pprf => {
+            for id in &deployment.package_history.pprf {
+                push_unique(&mut packages, Some(id));
+            }
+            push_unique(&mut packages, Some(&deployment.packages.pprf));
+        }
+        DeploymentPackageFamily::Governance => {
+            push_unique(&mut packages, Some(&deployment.packages.governance_original));
+            for id in &deployment.package_history.governance {
+                push_unique(&mut packages, Some(id));
+            }
+            push_unique(&mut packages, Some(&deployment.packages.governance));
+        }
+        DeploymentPackageFamily::Comments => {
+            for id in &deployment.package_history.comments {
+                push_unique(&mut packages, Some(id));
+            }
+            push_unique(&mut packages, Some(&deployment.packages.comments));
+        }
+        DeploymentPackageFamily::Publishing => {
+            push_unique(
+                &mut packages,
+                deployment.packages.publishing_original.as_deref(),
+            );
+            for id in &deployment.package_history.publishing {
+                push_unique(&mut packages, Some(id));
+            }
+            push_unique(&mut packages, Some(&deployment.packages.publishing));
+        }
+        DeploymentPackageFamily::Controller => {
+            for id in &deployment.package_history.controller {
+                push_unique(&mut packages, Some(id));
+            }
+            push_unique(&mut packages, deployment.packages.controller.as_deref());
+        }
+    }
+    packages
+}

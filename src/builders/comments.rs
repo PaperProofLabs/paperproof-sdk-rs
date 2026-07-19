@@ -6,9 +6,13 @@ use crate::{
     deployment::Deployment,
     error::Result,
     transaction::{MoveArgument as Arg, MoveCall, TransactionPlan},
-    types::{AddBlobCommentInput, AddOnchainCommentInput, SetCommentStatusInput},
+    types::{
+        AddBlobCommentInput, AddOnchainCommentInput, SetCommentStatusInput,
+        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
+        TransferTreeOwnerWithControllerInput,
+    },
     validation::{
-        validate_blob_comment, validate_comment_status, validate_object_id,
+        validate_address, validate_blob_comment, validate_comment_status, validate_object_id,
         validate_onchain_comment, validate_tree_status,
     },
 };
@@ -51,7 +55,7 @@ impl CommentsBuilder {
                 Arg::Object(self.base.deployment.objects.fee_manager.clone()),
                 Arg::U64(input.parent_comment_id),
                 Arg::Bytes(input.blob_id.clone()),
-                Arg::OptionalAddress(input.blob_object_id.clone()),
+                Arg::OptionalObject(input.blob_object_id.clone()),
                 Arg::Bytes(input.blob_digest.clone()),
                 Arg::Bytes(input.preview.clone()),
                 self.base.sui_payment(input.payment_coin_id.as_ref()),
@@ -82,12 +86,61 @@ impl CommentsBuilder {
         }))
     }
 
+    pub fn set_tree_status_with_controller(
+        &self,
+        input: &SetTreeStatusWithControllerInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.tree_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_tree_status(input.status)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.comments_target("set_tree_status_with_controller"),
+            arguments: vec![
+                Arg::Object(input.tree_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::U8(input.status),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
+    pub fn set_comment_status_with_controller(
+        &self,
+        input: &SetCommentStatusWithControllerInput,
+    ) -> Result<TransactionPlan> {
+        validate_object_id(&input.tree_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_comment_status(input.status)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.comments_target("set_comment_status_with_controller"),
+            arguments: vec![
+                Arg::Object(input.tree_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::U64(input.comment_id),
+                Arg::U8(input.status),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
+            ],
+        }))
+    }
+
     pub fn like_paper(
         &self,
         likes_book_id: &str,
         pprf_proof_coin_id: &str,
     ) -> Result<TransactionPlan> {
-        self.like_call("like_paper", likes_book_id, pprf_proof_coin_id)
+        validate_object_id(likes_book_id)?;
+        validate_object_id(pprf_proof_coin_id)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.comments_target("like_paper"),
+            arguments: vec![
+                Arg::Object(likes_book_id.to_string()),
+                Arg::Object(pprf_proof_coin_id.to_string()),
+            ],
+        }))
     }
 
     pub fn unlike_paper(
@@ -95,12 +148,20 @@ impl CommentsBuilder {
         likes_book_id: &str,
         pprf_proof_coin_id: &str,
     ) -> Result<TransactionPlan> {
-        self.like_call("unlike_paper", likes_book_id, pprf_proof_coin_id)
+        validate_object_id(likes_book_id)?;
+        validate_object_id(pprf_proof_coin_id)?;
+        Ok(TransactionPlan::single(MoveCall {
+            target: self.base.comments_target("unlike_paper"),
+            arguments: vec![
+                Arg::Object(likes_book_id.to_string()),
+                Arg::Object(pprf_proof_coin_id.to_string()),
+            ],
+        }))
     }
 
     pub fn transfer_tree_owner(&self, tree_id: &str, new_owner: &str) -> Result<TransactionPlan> {
         validate_object_id(tree_id)?;
-        crate::validation::validate_address(new_owner)?;
+        validate_address(new_owner)?;
         Ok(TransactionPlan::single(MoveCall {
             target: self.base.comments_target("transfer_tree_owner"),
             arguments: vec![
@@ -110,19 +171,22 @@ impl CommentsBuilder {
         }))
     }
 
-    fn like_call(
+    pub fn transfer_tree_owner_with_controller(
         &self,
-        function: &str,
-        likes_book_id: &str,
-        pprf_proof_coin_id: &str,
+        input: &TransferTreeOwnerWithControllerInput,
     ) -> Result<TransactionPlan> {
-        validate_object_id(likes_book_id)?;
-        validate_object_id(pprf_proof_coin_id)?;
+        validate_object_id(&input.tree_id)?;
+        validate_object_id(&input.control_record_id)?;
+        validate_object_id(&input.controller_nft_id)?;
+        validate_address(&input.new_owner)?;
         Ok(TransactionPlan::single(MoveCall {
-            target: self.base.comments_target(function),
+            target: self.base.comments_target("transfer_tree_owner_with_controller"),
             arguments: vec![
-                Arg::Object(likes_book_id.to_string()),
-                Arg::Object(pprf_proof_coin_id.to_string()),
+                Arg::Object(input.tree_id.clone()),
+                Arg::Object(input.control_record_id.clone()),
+                Arg::Object(input.controller_nft_id.clone()),
+                Arg::Address(input.new_owner.clone()),
+                Arg::Object(self.base.deployment.objects.clock.clone()),
             ],
         }))
     }

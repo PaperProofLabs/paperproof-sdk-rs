@@ -33,6 +33,18 @@ pub mod comment_status {
     pub const DELETED: u8 = 2;
 }
 
+pub mod controller_authority_mode {
+    pub const LEGACY_OWNER_ONLY: u8 = 0;
+    pub const DUAL_MODE: u8 = 1;
+    pub const CONTROLLER_PRIMARY: u8 = 2;
+    pub const CONTROLLER_ONLY: u8 = 3;
+}
+
+pub mod reserved_metadata_keys {
+    pub const SERIES_DESCRIPTION: &str = "series_description";
+    pub const VERSION_CHANGE_NOTE: &str = "version_change_note";
+}
+
 pub mod fee_level {
     pub const FREE: u8 = 0;
     pub const MICRO: u8 = 1;

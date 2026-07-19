@@ -31,6 +31,7 @@ struct AbortExplanation {
 
 const MODULE_HINTS: &[&str] = &[
     "comments",
+    "controller",
     "governance_voting",
     "governance",
     "publishing",
@@ -66,6 +67,48 @@ const ABORTS: &[AbortExplanation] = &[
         title: "On-chain comment too large",
         detail: "The on-chain comment exceeds the tree limit.",
         suggestion: "Use a blob comment or shorten the content.",
+    },
+    AbortExplanation {
+        module: "comments",
+        code: 8,
+        title: "Not the comments tree owner",
+        detail: "The signer is not authorized for legacy tree-owner control.",
+        suggestion: "For legacy trees, use the current tree owner account. For controller-managed series, use the bound controller NFT holder and controller-aware comments builders.",
+    },
+    AbortExplanation {
+        module: "controller",
+        code: 6,
+        title: "Legacy write path disabled",
+        detail: "This series no longer accepts legacy owner-only privileged writes.",
+        suggestion: "Use the controller-aware builder and the bound controlRecordId/controllerNftId inputs.",
+    },
+    AbortExplanation {
+        module: "controller",
+        code: 7,
+        title: "Invalid control record",
+        detail: "The supplied control record does not match the target series or controller state.",
+        suggestion: "Re-read the series control snapshot and use the current controlRecordId from chain.",
+    },
+    AbortExplanation {
+        module: "controller",
+        code: 8,
+        title: "Invalid controller NFT",
+        detail: "The supplied controller NFT is not the one bound to the target series.",
+        suggestion: "Resolve the series control snapshot and pass the exact bound controllerNftId.",
+    },
+    AbortExplanation {
+        module: "controller",
+        code: 9,
+        title: "Controller transfer locked",
+        detail: "The control record is temporarily locked against controller-transfer-sensitive operations.",
+        suggestion: "Wait for the lock to clear or use the authorized sync/repair/promotion path first.",
+    },
+    AbortExplanation {
+        module: "controller",
+        code: 10,
+        title: "Invalid comments tree binding",
+        detail: "The supplied comments tree does not match the controller-bound series record.",
+        suggestion: "Use the canonical commentsTreeId from the series view or control snapshot.",
     },
     AbortExplanation {
         module: "comments",
@@ -224,9 +267,9 @@ const ABORTS: &[AbortExplanation] = &[
     AbortExplanation {
         module: "publishing",
         code: 21,
-        title: "Not series owner",
-        detail: "Only the series owner can perform this action.",
-        suggestion: "Use the current owner account or transfer ownership first.",
+        title: "Not series authority",
+        detail: "The signer is not authorized for this series write under the current authority mode.",
+        suggestion: "For legacy series, use the current owner account. For controller-managed series, use the bound controller NFT holder and controller-aware publishing builder.",
     },
     AbortExplanation {
         module: "publishing",

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    deployment::Deployment,
+    deployment::{Deployment, DeploymentPackageFamily, deployment_package_ids},
     error::{PaperProofError, Result},
 };
 
@@ -705,7 +705,15 @@ fn required_u64(fields: &Value, field: &str) -> Result<u64> {
 
 pub fn is_from_known_package(event: &SuiEventEnvelope, deployment: &Deployment) -> bool {
     let package = event.package_id.as_str();
-    package == deployment.packages.publishing
-        || package == deployment.packages.comments
-        || package == deployment.packages.governance
+    deployment_package_ids(deployment, DeploymentPackageFamily::Publishing)
+        .into_iter()
+        .chain(deployment_package_ids(
+            deployment,
+            DeploymentPackageFamily::Comments,
+        ))
+        .chain(deployment_package_ids(
+            deployment,
+            DeploymentPackageFamily::Governance,
+        ))
+        .any(|known| package.eq_ignore_ascii_case(&known))
 }

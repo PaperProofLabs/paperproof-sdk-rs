@@ -10,8 +10,11 @@ use paperproof_sdk_rs::{
     governance,
     transaction::MoveArgument,
     types::{
-        AddOnchainCommentInput, AddVersionInput, CreateExecutableProposalInput,
-        CreateSignalProposalInput, SetCommentStatusInput,
+        AddOnchainCommentInput, AddVersionInput, AddVersionWithControllerInput,
+        CreateExecutableProposalInput, CreateSignalProposalInput,
+        PromoteExistingSeriesControllerModeInput, SetCommentStatusInput,
+        SetCommentStatusWithControllerInput, SetTreeStatusWithControllerInput,
+        TransferArtifactOwnerWithControllerInput, TransferTreeOwnerWithControllerInput,
     },
 };
 
@@ -457,6 +460,133 @@ fn builds_all_add_version_calls() {
 }
 
 #[test]
+fn controller_add_version_requires_version_change_note() {
+    let client = PaperProofClient::mainnet();
+    let mut body = common::sample_blog_post();
+    body.version_change_note = None;
+    let error = client
+        .publishing
+        .add_blog_post_version_with_controller(&AddVersionWithControllerInput {
+            series_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            body,
+        })
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("version_change_note is required"));
+}
+
+#[test]
+fn controller_builders_match_current_contract_abi() {
+    let client = PaperProofClient::mainnet();
+    let deployment = mainnet_deployment();
+
+    let blog = client
+        .publishing
+        .add_blog_post_version_with_controller(&AddVersionWithControllerInput {
+            series_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            body: common::sample_blog_post(),
+        })
+        .unwrap();
+    assert_call_shape(
+        &blog.calls[0],
+        "add_blog_post_version_with_controller",
+        18,
+        &[
+            (0, MoveArgument::Object(deployment.objects.root.clone())),
+            (
+                1,
+                MoveArgument::Object(deployment.objects.type_registry.clone()),
+            ),
+            (2, MoveArgument::Object("0x1234".to_string())),
+            (3, MoveArgument::Object("0x5678".to_string())),
+            (4, MoveArgument::Object("0x9abc".to_string())),
+            (
+                5,
+                MoveArgument::Object(deployment.objects.governance_vault.clone()),
+            ),
+            (
+                6,
+                MoveArgument::Object(deployment.objects.fee_manager.clone()),
+            ),
+            (7, MoveArgument::String("PaperProof SDK blog".to_string())),
+            (
+                8,
+                MoveArgument::String("A local SDK blog test.".to_string()),
+            ),
+            (9, MoveArgument::StringVector(vec!["sdk".to_string()])),
+            (10, MoveArgument::String("en".to_string())),
+            (17, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+    assert_reserved_note(
+        &blog.calls[0].arguments[15],
+        "version_change_note",
+        "Initial blog fixture.",
+    );
+    assert_eq!(blog.calls[0].arguments[16], MoveArgument::OptionalObject(None));
+
+    let transfer_owner = client
+        .publishing
+        .transfer_artifact_owner_with_controller(&TransferArtifactOwnerWithControllerInput {
+            series_id: "0x1234".to_string(),
+            comments_tree_id: "0x2222".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            new_owner:
+                "0x1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+        })
+        .unwrap();
+    assert_call_shape(
+        &transfer_owner.calls[0],
+        "transfer_artifact_owner_with_controller",
+        6,
+        &[
+            (0, MoveArgument::Object("0x1234".to_string())),
+            (1, MoveArgument::Object("0x2222".to_string())),
+            (2, MoveArgument::Object("0x5678".to_string())),
+            (3, MoveArgument::Object("0x9abc".to_string())),
+            (
+                4,
+                MoveArgument::Address(
+                    "0x1111111111111111111111111111111111111111111111111111111111111111"
+                        .to_string(),
+                ),
+            ),
+            (5, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let promote = client
+        .publishing
+        .promote_existing_series_to_controller_primary(
+            &PromoteExistingSeriesControllerModeInput {
+                series_id: "0x1234".to_string(),
+                comments_tree_id: "0x2222".to_string(),
+                control_record_id: "0x5678".to_string(),
+                controller_nft_id: "0x9abc".to_string(),
+            },
+        )
+        .unwrap();
+    assert_call_shape(
+        &promote.calls[0],
+        "promote_existing_series_to_controller_primary",
+        5,
+        &[
+            (0, MoveArgument::Object("0x1234".to_string())),
+            (1, MoveArgument::Object("0x2222".to_string())),
+            (2, MoveArgument::Object("0x5678".to_string())),
+            (3, MoveArgument::Object("0x9abc".to_string())),
+            (4, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+}
+
+#[test]
 fn builds_executable_proposal_with_ts_argument_layout() {
     let client = PaperProofClient::mainnet();
     let plan = client
@@ -572,6 +702,88 @@ fn builds_comment_and_status_calls() {
 }
 
 #[test]
+fn controller_comment_builders_match_current_contract_abi() {
+    let client = PaperProofClient::mainnet();
+    let deployment = mainnet_deployment();
+
+    let tree = client
+        .comments
+        .set_tree_status_with_controller(&SetTreeStatusWithControllerInput {
+            tree_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            status: tree_status::LOCKED,
+        })
+        .unwrap();
+    assert_call_shape(
+        &tree.calls[0],
+        "set_tree_status_with_controller",
+        5,
+        &[
+            (0, MoveArgument::Object("0x1234".to_string())),
+            (1, MoveArgument::Object("0x5678".to_string())),
+            (2, MoveArgument::Object("0x9abc".to_string())),
+            (3, MoveArgument::U8(tree_status::LOCKED)),
+            (4, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let comment = client
+        .comments
+        .set_comment_status_with_controller(&SetCommentStatusWithControllerInput {
+            tree_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            comment_id: 7,
+            status: comment_status::HIDDEN,
+        })
+        .unwrap();
+    assert_call_shape(
+        &comment.calls[0],
+        "set_comment_status_with_controller",
+        6,
+        &[
+            (0, MoveArgument::Object("0x1234".to_string())),
+            (1, MoveArgument::Object("0x5678".to_string())),
+            (2, MoveArgument::Object("0x9abc".to_string())),
+            (3, MoveArgument::U64(7)),
+            (4, MoveArgument::U8(comment_status::HIDDEN)),
+            (5, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+
+    let transfer = client
+        .comments
+        .transfer_tree_owner_with_controller(&TransferTreeOwnerWithControllerInput {
+            tree_id: "0x1234".to_string(),
+            control_record_id: "0x5678".to_string(),
+            controller_nft_id: "0x9abc".to_string(),
+            new_owner:
+                "0x1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+        })
+        .unwrap();
+    assert_call_shape(
+        &transfer.calls[0],
+        "transfer_tree_owner_with_controller",
+        5,
+        &[
+            (0, MoveArgument::Object("0x1234".to_string())),
+            (1, MoveArgument::Object("0x5678".to_string())),
+            (2, MoveArgument::Object("0x9abc".to_string())),
+            (
+                3,
+                MoveArgument::Address(
+                    "0x1111111111111111111111111111111111111111111111111111111111111111"
+                        .to_string(),
+                ),
+            ),
+            (4, MoveArgument::Object(deployment.objects.clock.clone())),
+        ],
+    );
+}
+
+#[test]
 fn transaction_plan_can_batch_calls() {
     let client = PaperProofClient::mainnet();
     let mut plan = TransactionPlan::new();
@@ -615,4 +827,14 @@ fn assert_add_version_shape(
         &[(2, MoveArgument::Object("0x1234".to_string()))],
     );
     assert_call_shape(call, function, argument_count, expected_arguments);
+}
+
+fn assert_reserved_note(argument: &MoveArgument, key: &str, value: &str) {
+    let MoveArgument::MetadataVector(items) = argument else {
+        panic!("expected metadata vector, got {argument:?}");
+    };
+    assert!(
+        items.iter().any(|item| item.key == key && item.value == value),
+        "missing reserved metadata {key}={value} in {items:?}"
+    );
 }

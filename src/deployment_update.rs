@@ -10,8 +10,8 @@ use crate::{
 };
 
 pub const DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL: &str =
-    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments";
-pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str = "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/mainnet.json";
+    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments";
+pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str = "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments/mainnet.json";
 
 pub fn default_deployment_manifest_url(network: impl AsRef<str>) -> String {
     format!(
@@ -75,6 +75,7 @@ const DEPLOYMENT_PATHS: &[&str] = &[
     "packages.governance",
     "packages.comments",
     "packages.publishing",
+    "packages.controller",
     "objects.root",
     "objects.type_registry",
     "objects.fee_manager",
@@ -280,6 +281,7 @@ fn normalize_top_level_manifest_keys(value: &mut Value) {
     rename_key(object, "minSdkVersion", "min_sdk_version");
     rename_key(object, "updatedAt", "updated_at");
     rename_key(object, "releaseNotesUrl", "release_notes_url");
+    rename_key(object, "packageHistory", "package_history");
 }
 
 fn normalize_deployment_value(value: &mut Value) {
@@ -290,6 +292,11 @@ fn normalize_deployment_value(value: &mut Value) {
     rename_key(object, "protocolVersion", "protocol_version");
     if let Some(packages) = object.get_mut("packages").and_then(Value::as_object_mut) {
         rename_key(packages, "governanceOriginal", "governance_original");
+        rename_key(packages, "publishingOriginal", "publishing_original");
+        rename_key(packages, "sharedController", "controller");
+    }
+    if let Some(history) = object.get_mut("package_history").and_then(Value::as_object_mut) {
+        rename_key(history, "sharedController", "controller");
     }
     if let Some(objects) = object.get_mut("objects").and_then(Value::as_object_mut) {
         rename_key(objects, "typeRegistry", "type_registry");

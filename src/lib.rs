@@ -46,7 +46,10 @@ pub use builders::{
 };
 pub use client::{JsonRpcClient, PaperProofClient};
 pub use constants::*;
-pub use deployment::{Deployment, DeploymentObjects, DeploymentPackages, MAINNET_DEPLOYMENT};
+pub use deployment::{
+    Deployment, DeploymentObjects, DeploymentPackageFamily, DeploymentPackageHistory,
+    DeploymentPackages, MAINNET_DEPLOYMENT, deployment_package_ids,
+};
 pub use deployment_update::{
     DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL, DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL,
     DeploymentDriftPolicy, DeploymentManifest, DeploymentManifestStatus, DeploymentUpdateCheck,

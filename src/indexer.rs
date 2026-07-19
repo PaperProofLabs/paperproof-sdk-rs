@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
+    deployment::{DeploymentPackageFamily, deployment_package_ids},
     deployment::Deployment,
     error::{PaperProofError, Result},
     events::{PaperProofEventKind, SuiEventEnvelope, parse_event},
@@ -1117,20 +1118,29 @@ impl PaperProofIndexerClient {
     }
 
     pub fn canonical_module_filters(deployment: &Deployment) -> Vec<PackageModuleFilter> {
-        vec![
-            PackageModuleFilter {
-                package_id: deployment.packages.publishing.clone(),
+        deployment_package_ids(deployment, DeploymentPackageFamily::Publishing)
+            .into_iter()
+            .map(|package_id| PackageModuleFilter {
+                package_id,
                 module: "publishing".to_string(),
-            },
-            PackageModuleFilter {
-                package_id: deployment.packages.comments.clone(),
-                module: "comments".to_string(),
-            },
-            PackageModuleFilter {
-                package_id: deployment.packages.governance.clone(),
-                module: "governance_voting".to_string(),
-            },
-        ]
+            })
+            .chain(
+                deployment_package_ids(deployment, DeploymentPackageFamily::Comments)
+                    .into_iter()
+                    .map(|package_id| PackageModuleFilter {
+                        package_id,
+                        module: "comments".to_string(),
+                    }),
+            )
+            .chain(
+                deployment_package_ids(deployment, DeploymentPackageFamily::Governance)
+                    .into_iter()
+                    .map(|package_id| PackageModuleFilter {
+                        package_id,
+                        module: "governance_voting".to_string(),
+                    }),
+            )
+            .collect()
     }
 
     pub async fn scan_once(&self, options: IndexerScanOptions) -> Result<IndexerEventBatch> {

@@ -4,11 +4,13 @@
 use serde_json::Value;
 
 use crate::{
+    constants::{controller_authority_mode, reserved_metadata_keys},
     error::Result,
     types::{
-        ArtifactSeriesView, ArtifactVersionView, CommentNodeView, CommentsTreeView, DecodedObject,
-        FeeManagerView, GovernanceConfigView, GovernanceVaultView, LikesBookView,
-        MetadataAttribute, PaperProofRootView, ProposalView,
+        ArtifactControlRecordView, ArtifactSeriesView, ArtifactVersionView, CommentNodeView,
+        CommentsTreeView, ControllerNFTView, DecodedObject, FeeManagerView,
+        GovernanceConfigView, GovernanceVaultView, LikesBookView, MetadataAttribute,
+        PaperProofRootView, ProposalView,
     },
 };
 
@@ -190,6 +192,30 @@ pub fn parse_metadata_attributes(value: &Value) -> Vec<MetadataAttribute> {
         .collect()
 }
 
+pub fn metadata_value(items: &[MetadataAttribute], key: &str) -> Option<String> {
+    items.iter()
+        .find(|item| item.key == key)
+        .map(|item| item.value.clone())
+}
+
+pub fn authority_mode_name(value: Option<u64>) -> Option<String> {
+    match value {
+        Some(number) if number == controller_authority_mode::LEGACY_OWNER_ONLY as u64 => {
+            Some("legacy_owner_only".to_string())
+        }
+        Some(number) if number == controller_authority_mode::DUAL_MODE as u64 => {
+            Some("dual_mode".to_string())
+        }
+        Some(number) if number == controller_authority_mode::CONTROLLER_PRIMARY as u64 => {
+            Some("controller_primary".to_string())
+        }
+        Some(number) if number == controller_authority_mode::CONTROLLER_ONLY as u64 => {
+            Some("controller_only".to_string())
+        }
+        _ => None,
+    }
+}
+
 pub fn parse_id_vector(value: &Value) -> Vec<String> {
     vector_items(value)
         .into_iter()
@@ -225,6 +251,10 @@ pub fn view_root(object: &DecodedObject) -> PaperProofRootView {
 
 pub fn view_series(object: &DecodedObject) -> ArtifactSeriesView {
     let f = &object.fields;
+    let metadata_extensions = f
+        .get("metadata_extensions")
+        .map(parse_metadata_attributes)
+        .unwrap_or_default();
     ArtifactSeriesView {
         id: object.id.clone(),
         artifact_type: f.get("artifact_type").and_then(u8_value),
@@ -236,10 +266,16 @@ pub fn view_series(object: &DecodedObject) -> ArtifactSeriesView {
         likes_book_id: f.get("likes_book_id").and_then(id_value),
         status: f.get("status").and_then(u8_value),
         ui_status: f.get("ui_status").and_then(u8_value),
-        metadata_extensions: f
-            .get("metadata_extensions")
-            .map(parse_metadata_attributes)
-            .unwrap_or_default(),
+        series_description: metadata_value(
+            &metadata_extensions,
+            reserved_metadata_keys::SERIES_DESCRIPTION,
+        ),
+        series_control_enabled: None,
+        series_authority_mode: None,
+        series_authority_mode_name: None,
+        series_control_record_id: None,
+        series_controller_nft_id: None,
+        metadata_extensions,
         version_ids: f
             .get("version_ids")
             .map(parse_id_vector)
@@ -254,16 +290,21 @@ pub fn view_version(object: &DecodedObject) -> ArtifactVersionView {
         .and_then(|value| value.get("fields"))
         .or_else(|| f.get("header"));
     let header = header.unwrap_or(&Value::Null);
+    let metadata_extensions = header
+        .get("metadata_extensions")
+        .map(parse_metadata_attributes)
+        .unwrap_or_default();
     ArtifactVersionView {
         id: object.id.clone(),
         series_id: header.get("series_id").and_then(id_value),
         artifact_type: header.get("artifact_type").and_then(u8_value),
         version: header.get("version").and_then(u64_value),
         content_hash: header.get("content_hash").and_then(string_value),
-        metadata_extensions: header
-            .get("metadata_extensions")
-            .map(parse_metadata_attributes)
-            .unwrap_or_default(),
+        version_change_note: metadata_value(
+            &metadata_extensions,
+            reserved_metadata_keys::VERSION_CHANGE_NOTE,
+        ),
+        metadata_extensions,
         raw_fields: f.clone(),
     }
 }
@@ -288,6 +329,53 @@ pub fn view_comments_tree(object: &DecodedObject) -> CommentsTreeView {
         max_onchain_comment_bytes: f.get("max_onchain_comment_bytes").and_then(u64_value),
         max_comment_depth: f.get("max_comment_depth").and_then(u8_value),
         likes_book_id: f.get("likes_book_id").and_then(id_value),
+        tree_control_enabled: None,
+        tree_authority_mode: None,
+        tree_authority_mode_name: None,
+        tree_control_record_id: None,
+        tree_controller_nft_id: None,
+    }
+}
+
+pub fn view_controller_nft(object: &DecodedObject) -> ControllerNFTView {
+    let f = &object.fields;
+    ControllerNFTView {
+        id: object.id.clone(),
+        version: f.get("version").and_then(u64_value),
+        series_id: f.get("series_id").and_then(id_value),
+        artifact_code: f.get("artifact_code").and_then(string_value),
+        artifact_type_name: f.get("artifact_type_name").and_then(string_value),
+        control_right: f.get("control_right").and_then(string_value),
+        authority_mode_name: f.get("authority_mode_name").and_then(string_value),
+        image_url: f.get("image_url").and_then(string_value),
+        artifact_type: f.get("artifact_type").and_then(u8_value),
+        control_record_id: f.get("control_record_id").and_then(id_value),
+        issued_at_ms: f.get("issued_at_ms").and_then(u64_value),
+    }
+}
+
+pub fn view_artifact_control_record(object: &DecodedObject) -> ArtifactControlRecordView {
+    let f = &object.fields;
+    let authority_mode = f.get("authority_mode").and_then(u64_value);
+    ArtifactControlRecordView {
+        id: object.id.clone(),
+        version: f.get("version").and_then(u64_value),
+        series_id: f.get("series_id").and_then(id_value),
+        comments_tree_id: f.get("comments_tree_id").and_then(id_value),
+        artifact_type: f.get("artifact_type").and_then(u8_value),
+        controller_nft_id: f.get("controller_nft_id").and_then(id_value),
+        current_controller_mirror: f.get("current_controller_mirror").and_then(string_value),
+        legacy_series_owner_mirror: f
+            .get("legacy_series_owner_mirror")
+            .and_then(string_value),
+        legacy_comments_owner_mirror: f
+            .get("legacy_comments_owner_mirror")
+            .and_then(string_value),
+        authority_mode,
+        authority_mode_name: authority_mode_name(authority_mode),
+        transfer_locked: f.get("transfer_locked").and_then(bool_value),
+        created_at_ms: f.get("created_at_ms").and_then(u64_value),
+        updated_at_ms: f.get("updated_at_ms").and_then(u64_value),
     }
 }
 

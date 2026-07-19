@@ -1,6 +1,6 @@
 [package]
 name = "paperproof-sdk-rs"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 description = "Rust SDK for the PaperProof protocol on Sui"
 license = "Apache-2.0"

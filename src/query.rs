@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     client::JsonRpcClient,
-    deployment::Deployment,
+    deployment::{Deployment, DeploymentPackageFamily, deployment_package_ids},
     error::{PaperProofError, Result},
     event_verifier::{PaperProofEventVerifier, VerifyEventOptions},
     events::{SuiEventEnvelope, extract_events_by_struct},
@@ -17,7 +17,10 @@ use crate::{
         attach_event_verification, validate_event_trust, verification_report_from_canonical_check,
     },
     read::PaperProofReadClient,
-    types::{ArtifactSeriesView, ArtifactVersionView, CommentsTreeView, LikesBookView},
+    types::{
+        ArtifactSeriesView, ArtifactVersionView, CommentsTreeView, LikesBookView,
+        SeriesControlSnapshot,
+    },
     validation::{validate_address, validate_object_id},
 };
 
@@ -182,6 +185,7 @@ pub struct SeriesDetails {
     pub current_version: Option<ArtifactVersionView>,
     pub comments_tree: Option<CommentsTreeView>,
     pub likes_book: Option<LikesBookView>,
+    pub control_snapshot: SeriesControlSnapshot,
 }
 
 #[derive(Clone, Debug)]
@@ -257,11 +261,13 @@ impl PaperProofQueryClient {
             Some(book_id) => Some(self.read.get_likes_book_view(book_id).await?),
             None => None,
         };
+        let control_snapshot = self.read.get_series_control_snapshot(series_id).await?;
         Ok(SeriesDetails {
             series,
             current_version,
             comments_tree,
             likes_book,
+            control_snapshot,
         })
     }
 
@@ -419,10 +425,10 @@ impl PaperProofQueryClient {
         let mut raw_pages = Vec::new();
         let mut next_cursor = None;
         let mut has_next_page = false;
-        for package_id in [
-            &self.deployment.packages.governance,
-            &self.deployment.packages.governance_original,
-        ] {
+        for package_id in deployment_package_ids(
+            &self.deployment,
+            DeploymentPackageFamily::Governance,
+        ) {
             let mut query = input.clone().unwrap_or_default();
             query.move_event_type = Some(format!("{package_id}::governance_voting::{struct_name}"));
             query.pagination.limit = Some(query.pagination.limit.unwrap_or(50).min(50));

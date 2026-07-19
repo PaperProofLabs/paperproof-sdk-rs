@@ -10,7 +10,7 @@ use std::{
 
 use paperproof_sdk_rs::{
     EventTrustLevel, JsonRpcClient, PaperProofQueryClient, PaperProofWatchClient, WatchOptions,
-    deployment::mainnet_deployment,
+    deployment::{DeploymentPackageFamily, deployment_package_ids, mainnet_deployment},
 };
 use serde_json::{Value, json};
 
@@ -102,7 +102,12 @@ async fn watch_verified_events_returns_trust_reports() {
 #[tokio::test]
 async fn verified_typed_watch_helper_applies_move_event_filter() {
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let query = mock_query_client(calls.clone(), 1);
+    let deployment = mainnet_deployment();
+    let expected = deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing)
+        .into_iter()
+        .map(|package_id| format!("{package_id}::publishing::ArtifactStatusChangedEvent"))
+        .collect::<Vec<_>>();
+    let query = mock_query_client(calls.clone(), expected.len());
     let watch = PaperProofWatchClient::new(query);
     let page = watch
         .watch_verified_publishing_events(
@@ -117,22 +122,35 @@ async fn verified_typed_watch_helper_applies_move_event_filter() {
         .next()
         .await
         .expect("verified typed watch");
-    let deployment = mainnet_deployment();
-    assert_eq!(
-        *calls.lock().unwrap(),
-        vec![format!(
-            "{}::publishing::ArtifactStatusChangedEvent",
-            deployment.packages.publishing
-        )]
-    );
+    assert_eq!(*calls.lock().unwrap(), expected);
     assert_eq!(page.trust, EventTrustLevel::Verified);
-    assert_eq!(page.incomplete.len(), 1);
+    assert_eq!(page.incomplete.len(), deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing).len());
 }
 
 #[tokio::test]
 async fn watch_publishing_and_comments_helpers_use_move_event_types() {
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let query = mock_query_client(calls.clone(), 4);
+    let deployment = mainnet_deployment();
+    let expected = deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing)
+        .into_iter()
+        .map(|package_id| format!("{package_id}::publishing::ArtifactPublishedEvent"))
+        .chain(
+            deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing)
+                .into_iter()
+                .map(|package_id| format!("{package_id}::publishing::ArtifactVersionAddedEvent")),
+        )
+        .chain(
+            deployment_package_ids(&deployment, DeploymentPackageFamily::Comments)
+                .into_iter()
+                .map(|package_id| format!("{package_id}::comments::CommentAddedEvent")),
+        )
+        .chain(
+            deployment_package_ids(&deployment, DeploymentPackageFamily::Comments)
+                .into_iter()
+                .map(|package_id| format!("{package_id}::comments::PaperLikedEvent")),
+        )
+        .collect::<Vec<_>>();
+    let query = mock_query_client(calls.clone(), expected.len());
     let watch = PaperProofWatchClient::new(query);
     watch
         .watch_artifact_published_events(WatchOptions {
@@ -166,34 +184,45 @@ async fn watch_publishing_and_comments_helpers_use_move_event_types() {
         .next()
         .await
         .expect("like");
-    let deployment = mainnet_deployment();
-    assert_eq!(
-        *calls.lock().expect("calls"),
-        vec![
-            format!(
-                "{}::publishing::ArtifactPublishedEvent",
-                deployment.packages.publishing
-            ),
-            format!(
-                "{}::publishing::ArtifactVersionAddedEvent",
-                deployment.packages.publishing
-            ),
-            format!(
-                "{}::comments::CommentAddedEvent",
-                deployment.packages.comments
-            ),
-            format!(
-                "{}::comments::PaperLikedEvent",
-                deployment.packages.comments
-            ),
-        ]
-    );
+    assert_eq!(*calls.lock().expect("calls"), expected);
 }
 
 #[tokio::test]
 async fn watch_aggregate_helpers_query_multiple_event_types_and_dedupe() {
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let query = mock_query_client(calls.clone(), 6);
+    let deployment = mainnet_deployment();
+    let publishing = deployment_package_ids(&deployment, DeploymentPackageFamily::Publishing);
+    let comments = deployment_package_ids(&deployment, DeploymentPackageFamily::Comments);
+    let expected = publishing
+        .iter()
+        .map(|package_id| format!("{package_id}::publishing::ArtifactStatusChangedEvent"))
+        .chain(
+            publishing
+                .iter()
+                .map(|package_id| format!("{package_id}::publishing::ProtocolPausedChangedEvent")),
+        )
+        .chain(
+            comments
+                .iter()
+                .map(|package_id| format!("{package_id}::comments::TreeStatusChangedEvent")),
+        )
+        .chain(
+            comments
+                .iter()
+                .map(|package_id| format!("{package_id}::comments::CommentStatusChangedEvent")),
+        )
+        .chain(
+            publishing
+                .iter()
+                .map(|package_id| format!("{package_id}::publishing::ArtifactOwnerTransferredEvent")),
+        )
+        .chain(
+            comments
+                .iter()
+                .map(|package_id| format!("{package_id}::comments::TreeOwnerTransferredEvent")),
+        )
+        .collect::<Vec<_>>();
+    let query = mock_query_client(calls.clone(), expected.len());
     let watch = PaperProofWatchClient::new(query);
     let status = watch
         .watch_status_changed_events(WatchOptions {
@@ -211,36 +240,7 @@ async fn watch_aggregate_helpers_query_multiple_event_types_and_dedupe() {
         .next()
         .await
         .expect("owner");
-    let deployment = mainnet_deployment();
-    assert_eq!(
-        *calls.lock().expect("calls"),
-        vec![
-            format!(
-                "{}::publishing::ArtifactStatusChangedEvent",
-                deployment.packages.publishing
-            ),
-            format!(
-                "{}::publishing::ProtocolPausedChangedEvent",
-                deployment.packages.publishing
-            ),
-            format!(
-                "{}::comments::TreeStatusChangedEvent",
-                deployment.packages.comments
-            ),
-            format!(
-                "{}::comments::CommentStatusChangedEvent",
-                deployment.packages.comments
-            ),
-            format!(
-                "{}::publishing::ArtifactOwnerTransferredEvent",
-                deployment.packages.publishing
-            ),
-            format!(
-                "{}::comments::TreeOwnerTransferredEvent",
-                deployment.packages.comments
-            ),
-        ]
-    );
+    assert_eq!(*calls.lock().expect("calls"), expected);
     assert_eq!(status.data.len(), 1);
     assert_eq!(owner.data.len(), 1);
 }
@@ -248,7 +248,12 @@ async fn watch_aggregate_helpers_query_multiple_event_types_and_dedupe() {
 #[tokio::test]
 async fn watch_governance_helper_queries_current_and_original_packages() {
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let query = mock_query_client(calls.clone(), 2);
+    let deployment = mainnet_deployment();
+    let expected = deployment_package_ids(&deployment, DeploymentPackageFamily::Governance)
+        .into_iter()
+        .map(|package_id| format!("{package_id}::governance_voting::VoteCastEvent"))
+        .collect::<Vec<_>>();
+    let query = mock_query_client(calls.clone(), expected.len());
     let watch = PaperProofWatchClient::new(query);
     let page = watch
         .watch_governance_vote_cast_events(WatchOptions {
@@ -258,19 +263,6 @@ async fn watch_governance_helper_queries_current_and_original_packages() {
         .next()
         .await
         .expect("vote");
-    let deployment = mainnet_deployment();
-    assert_eq!(
-        *calls.lock().expect("calls"),
-        vec![
-            format!(
-                "{}::governance_voting::VoteCastEvent",
-                deployment.packages.governance
-            ),
-            format!(
-                "{}::governance_voting::VoteCastEvent",
-                deployment.packages.governance_original
-            ),
-        ]
-    );
+    assert_eq!(*calls.lock().expect("calls"), expected);
     assert_eq!(page.data.len(), 1);
 }
