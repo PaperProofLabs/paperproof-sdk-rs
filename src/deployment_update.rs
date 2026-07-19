@@ -10,8 +10,8 @@ use crate::{
 };
 
 pub const DEFAULT_DEPLOYMENT_MANIFEST_BASE_URL: &str =
-    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments";
-pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str = "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments/mainnet.json";
+    "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments";
+pub const DEFAULT_MAINNET_DEPLOYMENT_MANIFEST_URL: &str = "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/mainnet.json";
 
 pub fn default_deployment_manifest_url(network: impl AsRef<str>) -> String {
     format!(

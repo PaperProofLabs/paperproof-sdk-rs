@@ -26,11 +26,11 @@ fn detects_deployment_drift() {
 fn default_manifest_url_is_network_specific_and_contracts_hosted() {
     assert_eq!(
         default_deployment_manifest_url("mainnet"),
-        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments/mainnet.json"
+        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/mainnet.json"
     );
     assert_eq!(
         default_deployment_manifest_url("testnet"),
-        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/nft/docs/deployments/testnet.json"
+        "https://raw.githubusercontent.com/PaperProofLabs/paperproof-contracts/main/docs/deployments/testnet.json"
     );
 }
 
@@ -91,7 +91,7 @@ fn mainnet_deployment_matches_contracts_repository_manifest() {
     let manifest_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("sdk repo has a parent workspace directory")
-        .join("paperproof-contracts-NFT")
+        .join("paperproof-contracts")
         .join("docs")
         .join("deployments")
         .join("mainnet.json");
