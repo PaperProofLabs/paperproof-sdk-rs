@@ -24,7 +24,7 @@ use crate::{
     validation::{validate_address, validate_object_id},
 };
 
-pub const MAINNET_GRAPHQL_ENDPOINT: &str = "https://rpc.ankr.com/http/sui_graphql";
+pub const MAINNET_GRAPHQL_ENDPOINT: &str = "https://graphql.mainnet.sui.io/graphql";
 pub const TESTNET_GRAPHQL_ENDPOINT: &str = "https://rpc.ankr.com/http/sui_testnet_graphql";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]

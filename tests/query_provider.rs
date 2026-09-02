@@ -5,7 +5,7 @@ use paperproof_sdk_rs::{
     GraphQlQueryProvider, JsonRpcClient, PaperProofQueryClient,
     deployment::mainnet_deployment,
     events::SuiEventEnvelope,
-    query::{EventPage, EventQueryInput, PaginationInput, dedupe_events, event_dedupe_key},
+    query::{EventPage, EventQueryInput, PaginationInput, build_graphql_event_filter, dedupe_events, event_dedupe_key},
 };
 use serde_json::json;
 
@@ -95,6 +95,17 @@ fn mainnet_query_client_is_graphql_first() {
 }
 
 #[test]
+fn mainnet_query_client_uses_official_graphql_endpoint() {
+    let query = PaperProofQueryClient::mainnet();
+    match query.query_provider {
+        paperproof_sdk_rs::PaperProofQueryProvider::GraphQl(provider) => {
+            assert_eq!(provider.endpoint, "https://graphql.mainnet.sui.io/graphql");
+        }
+        _ => panic!("expected mainnet query client to use GraphQL"),
+    }
+}
+
+#[test]
 fn event_query_input_can_page_graphql_events() {
     let input = EventQueryInput {
         move_event_type: Some("0x1::m::E".to_string()),
@@ -106,6 +117,16 @@ fn event_query_input_can_page_graphql_events() {
         ..Default::default()
     };
     assert_eq!(input.pagination.limit, Some(100));
+}
+
+#[test]
+fn graphql_filter_rejects_package_only_queries() {
+    let error = build_graphql_event_filter(&EventQueryInput {
+        package_id: Some("0x1234".to_string()),
+        ..Default::default()
+    })
+    .unwrap_err();
+    assert!(error.to_string().contains("package-only event filtering"));
 }
 
 fn event(
